@@ -16,8 +16,12 @@ type Toast = {
   id: number;
 };
 
-/** Cuánto permanece visible el aviso de éxito antes de desaparecer. */
-const TOAST_MS = 6000;
+/**
+ * Cuánto permanece visible el aviso de éxito antes de desaparecer.
+ * Alineado con el acuse de `DeployStatus`: ambos son avisos de "petición
+ * enviada", no indicadores de progreso de un build que no podemos observar.
+ */
+const TOAST_MS = 4500;
 
 /** Lo que devuelve `triggerDeploy` a través de la action. */
 type DeployOutcome = DeployResult;
