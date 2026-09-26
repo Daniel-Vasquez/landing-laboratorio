@@ -18,12 +18,34 @@
    Nunca escribas colores hardcodeados en los componentes.
 --------------------------------------------------------------------------- */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /*
+   * Stack de fuentes del sistema, SIN fuente web.
+   *
+   * El plan original pedía autoalojar Inter. Se descartó por dos razones:
+   *
+   *   1. Nombrar "Inter" sin servir el archivo es peor que no nombrarla: quien
+   *      la tenga instalada la ve, quien no ve system-ui, y el diseño se
+   *      renderiza distinto según la máquina del visitante.
+   *   2. Servirla cuesta ~50-70 KB sobre el cable (subset latin, pesos 400 y
+   *      700) más el riesgo de FOUT. El JS total de la landing es 1.97 KB: la
+   *      fuente sería 25 veces todo lo demás, en un proyecto cuyo requisito
+   *      explícito es la máxima velocidad de carga, y sin que el cliente haya
+   *      pedido ninguna tipografía de marca.
+   *
+   * El stack del sistema cuesta 0 bytes, pinta en el primer frame y da la
+   * tipografía nativa de cada plataforma (SF Pro, Segoe UI, Roboto).
+   * Si más adelante se define una tipografía de marca, autoalojarla en
+   * /public/fonts con `font-display: swap` y preload del peso 400.
+   */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
 
   --color-bg: var(--c-bg);
   --color-surface: var(--c-surface);
   --color-surface-muted: var(--c-surface-muted);
   --color-border: var(--c-border);
+  --color-border-strong: var(--c-border-strong);
   --color-primary: var(--c-primary);
   --color-primary-hover: var(--c-primary-hover);
   --color-primary-fg: var(--c-primary-fg);
@@ -33,16 +55,38 @@
 }
 
 /* ---- Tema Light (principal) ---- */
+/*
+ * Los colores entregados por el cliente son:
+ *   #eaedf2  #0d9488  #fafafa  #0284c7  #e9e9eb
+ *
+ * Tres se usan tal cual. Los dos cromáticos se bajan un paso en su misma
+ * familia porque los originales NO alcanzan WCAG 2.2 AA cuando llevan texto.
+ * Medido (ver `npm run a11y:contrast`):
+ *
+ *   #0d9488 como fondo de botón con texto blanco ... 3.74:1  ✗ (AA pide 4.5)
+ *   #0f766e como fondo de botón con texto blanco ... 5.47:1  ✓
+ *
+ *   #0284c7 como texto de link sobre #eaedf2 ....... 3.49:1  ✗
+ *   #0369a1 como texto de link sobre #eaedf2 ....... 5.06:1  ✓
+ *
+ * La diferencia visual es de un paso de escala (teal-600 -> 700, sky-600 ->
+ * 700): la identidad de marca se conserva. Para volver a los hex exactos,
+ * cambiar las dos líneas marcadas — asumiendo el fallo AA a conciencia.
+ */
 :root {
   color-scheme: light;
   --c-bg: #fafafa;
   --c-surface: #ffffff;
   --c-surface-muted: #eaedf2;
   --c-border: #e9e9eb;
-  --c-primary: #0d9488;
-  --c-primary-hover: #0f766e;
+  /* Borde de controles (inputs, botones con borde). WCAG 1.4.11 exige 3:1 para
+     el límite de un control; #e9e9eb da 1.16:1 y lo vuelve casi invisible.
+     Los bordes decorativos de tarjeta siguen usando --c-border. */
+  --c-border-strong: #8a8a8f;
+  --c-primary: #0f766e;        /* cliente: #0d9488 — subido a teal-700 por AA */
+  --c-primary-hover: #115e59;
   --c-primary-fg: #ffffff;
-  --c-accent: #0284c7;
+  --c-accent: #0369a1;         /* cliente: #0284c7 — subido a sky-700 por AA */
   --c-fg: #0f172a;
   --c-fg-muted: #475569;
 }
@@ -54,6 +98,7 @@
   --c-surface: #111a2b;
   --c-surface-muted: #1a2438;
   --c-border: #243049;
+  --c-border-strong: #5b6b8c;
   --c-primary: #2dd4bf;
   --c-primary-hover: #5eead4;
   --c-primary-fg: #04211f;

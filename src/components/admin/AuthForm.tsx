@@ -102,7 +102,8 @@ export default function AuthForm({ mode, redirectTo, requireInviteCode = false }
     [
       'w-full rounded-lg border bg-bg px-3.5 py-2.5 text-sm text-fg',
       'placeholder:text-fg-muted/70',
-      hasError ? 'border-red-500' : 'border-border',
+      // border-strong: WCAG 1.4.11 exige 3:1 para el límite de un control.
+      hasError ? 'border-red-500' : 'border-border-strong',
     ].join(' ');
 
   return (

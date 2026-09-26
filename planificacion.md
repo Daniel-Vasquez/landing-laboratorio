@@ -106,9 +106,23 @@ Tema **Light es el principal**; Dark se deriva.
 | `--color-fg` | `#0f172a` | `#eaedf2` | Texto principal |
 | `--color-fg-muted` | `#475569` | `#a3aec2` | Texto secundario |
 
-> Contraste: `#0d9488` sobre blanco = 3.9:1 → **no usar como texto pequeño**, solo como fondo
-> de botón con texto blanco (4.6:1) o en texto ≥ 18.66px bold. Para links en cuerpo de texto
-> usar `--color-accent` (`#0284c7` sobre `#fafafa` = 4.6:1 ✓ AA).
+> **CORRECCIÓN (Tanda 9, medido con `npm run a11y:contrast`): las dos cifras de arriba estaban
+> mal, y la paleta entregada NO cumple AA en el tema Light.**
+>
+> | Combinación | Afirmado antes | Medido | AA |
+> |---|---|---|---|
+> | `#0d9488` como fondo de botón, texto blanco | 4.6:1 | **3.74:1** | ✗ |
+> | `#0284c7` como texto sobre `#fafafa` | 4.6:1 | **3.92:1** | ✗ |
+> | `#0284c7` como texto sobre `#eaedf2` | — | **3.49:1** | ✗ |
+> | `#0d9488` como TEXTO sobre `#ffffff` (sidebar activo) | — | **3.74:1** | ✗ |
+>
+> Corregido bajando un paso cada familia en el tema Light: `#0d9488` → **`#0f766e`** (5.47:1 ✓)
+> y `#0284c7` → **`#0369a1`** (5.06:1 en el peor fondo ✓). Los tres colores no cromáticos de la
+> paleta (`#eaedf2`, `#fafafa`, `#e9e9eb`) se usan tal cual. El tema Dark ya cumplía en todo.
+>
+> Añadido `--c-border-strong` (`#8a8a8f` light / `#5b6b8c` dark) para el borde de los controles:
+> WCAG 1.4.11 exige 3:1 al límite de un control, y `#e9e9eb` da **1.16:1**, que vuelve los
+> inputs casi invisibles. Los bordes decorativos de tarjeta siguen con `--c-border` (exentos).
 
 ### 0.5 Estructura de directorios objetivo
 
@@ -1345,9 +1359,18 @@ Proyección explícita **con `_id: 0`**: `find({}, { projection: { _id: 0, name:
 
 ### 9.3 Performance
 
-- **Fuentes:** `Inter` autoalojada en `/public/fonts/` (subset `latin` + `latin-ext` para
-  acentos y "ñ"), `woff2`, `font-display: swap`, `<link rel="preload" as="font" crossorigin>`
-  solo para el peso 400 y 700. **No** usar Google Fonts (RTT extra + privacidad).
+- **Fuentes: NINGUNA fuente web (decisión revisada en Tanda 9).** El plan pedía autoalojar
+  Inter; se descartó por dos motivos:
+  1. Nombrar `"Inter"` en el stack sin servir el archivo es **peor** que no nombrarla: quien la
+     tenga instalada la ve y quien no ve `system-ui`, así que el diseño se renderiza distinto
+     según la máquina del visitante. (Ese era el estado real hasta la Tanda 9.)
+  2. Servirla cuesta ~50-70 KB sobre el cable (subset latin, pesos 400 y 700) más riesgo de
+     FOUT. El JS total de la landing es **1.97 KB**: la fuente sería 25× todo lo demás, en un
+     proyecto cuyo requisito explícito es la máxima velocidad, y el cliente no pidió ninguna
+     tipografía de marca.
+
+  Se usa el stack del sistema: 0 bytes, pinta en el primer frame. Si más adelante se define una
+  tipografía de marca, autoalojarla con `font-display: swap` y preload del peso 400.
 - **Imágenes:** `<Image />` de `astro:assets` para todo lo local. AVIF con fallback WebP.
   `width`/`height` siempre. La imagen del hero con `loading="eager"` `fetchpriority="high"`;
   el resto `lazy`.
@@ -1361,9 +1384,16 @@ Proyección explícita **con `_id: 0`**: `find({}, { projection: { _id: 0, name:
 ### 9.4 Criterios de aceptación Tanda 9
 
 - [ ] securityheaders.com → grado A o superior.
+- [ ] `npm run a11y:contrast` → sin fallos AA en ambos temas (14 combinaciones × 2).
+- [ ] `npm run a11y:html` → 15/15 comprobaciones estructurales sobre el HTML generado.
 - [ ] `axe DevTools` en `/` y en `/admin/contenido/hero`: 0 violaciones críticas o serias.
+      (Los dos scripts anteriores cubren lo mecánico; axe y la prueba con teclado siguen siendo
+      necesarios y **pendientes de ejecución manual**.)
 - [ ] Lighthouse mobile en `/` (producción): Performance ≥ 95, A11y 100, Best Practices ≥ 95, SEO 100.
-- [ ] 11 intentos de login en 60 s → el 11.º devuelve 429.
+- [ ] Login: el **4.º** intento en 10 s devuelve 429 con `x-retry-after`.
+      (Better Auth aplica reglas propias más estrictas a `/sign-in` y `/sign-up`: **3 por 10 s**,
+      no el `max: 10` de la config, que rige para el resto de endpoints. Verificado en el código
+      del paquete y en ejecución.)
 - [ ] Navegar y editar una sección completa usando solo teclado.
 
 ---
@@ -1458,6 +1488,9 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 22 | Better Auth exige header `Origin` en POST (CSRF) | Un cliente que no lo envíe recibe 403 | Los navegadores lo envían siempre en POST. Afecta solo a pruebas con curl. |
 | 23 | Editor mostrando semilla con la base caída | El editor guardaría sobre datos que no vio | La página comprueba la conexión aparte de `getSection` y avisa con `DbErrorBanner`. |
 | 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
+| 28 | **Paleta entregada sin contraste AA en tema Light** | CTA principal a 3.74:1 y links a 3.49:1: ilegibles para baja visión en un sitio de salud | Bajado un paso cada familia (`#0f766e`, `#0369a1`). Auditoría automatizada en `npm run a11y:contrast`. |
+| 29 | Borde de controles a 1.16:1 | Los inputs son casi invisibles (WCAG 1.4.11 pide 3:1) | `--c-border-strong` para inputs y botones con borde. |
+| 30 | `"Inter"` en el stack sin servir el archivo | El diseño cambia según las fuentes instaladas en la máquina del visitante | Stack del sistema puro, sin fuente web. |
 | 27 | Proyección sin `_id: 0` | El ObjectId de cada cuenta se publica en el HTML | `projection: { _id: 0, ... }` explícito en `getUsersView`. |
 | 26 | `pending: false` en la ruta de éxito del webhook | Los guardados concurrentes posteriores al claim se quedan sin publicar | La ruta de éxito no toca `pending`; el claim ya lo gestionó. |
 | 24 | **Comillas arrastradas al pegar env vars en Vercel** (`"https://..."`) | Build abortado con `Invalid URL`, sin decir qué variable ni qué valor. En `BETTER_AUTH_URL` es peor: rompe las cookies en silencio | `normalizeUrlEnv` en `src/lib/env.ts` + copia en `astro.config.mjs`: quita comillas, añade protocolo, quita slash final, avisa en el log, y si sigue siendo inválido falla nombrando la variable y el valor. `.env.example` ya no usa comillas. |

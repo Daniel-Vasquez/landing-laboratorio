@@ -56,5 +56,7 @@ export const inputClass = (hasError: boolean) =>
   [
     'w-full rounded-lg border bg-bg px-3.5 py-2.5 text-sm text-fg',
     'placeholder:text-fg-muted/70',
-    hasError ? 'border-red-500' : 'border-border',
+    // border-strong, no border: WCAG 1.4.11 pide 3:1 para el límite de un
+    // control, y el borde decorativo de tarjeta solo da 1.16:1.
+    hasError ? 'border-red-500' : 'border-border-strong',
   ].join(' ');
