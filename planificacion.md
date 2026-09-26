@@ -53,6 +53,7 @@ desde el frontmatter de páginas prerenderizadas o desde server actions.
 | `verification` | Better Auth | Tokens. Se crea aunque no usemos verificación. |
 | `landing_sections` | App | **Documento por sección.** `{ _id: SectionKey, data: object, updatedAt: Date, updatedBy: { userId, name, email } \| null }` — **la clave de sección ES el `_id`** (ver 0.3.1). |
 | `app_meta` | App | Singletons de sistema. Docs con `_id` string: `"last_change"`, `"deploy_state"`. |
+| `landing_images` | App | **Una fila por ranura de imagen** (Tanda 11). `_id` = `slotId` del registro en código. `{ publicId, version, width, height, format, bytes, alt, updatedAt, updatedBy }` |
 
 **Por qué documento-por-sección y no un único doc `landing`:** permite guardado granular
 (un editor toca solo el Hero → un solo `updateOne`) y evita conflictos de escritura concurrente.
@@ -1432,6 +1433,10 @@ Cargar todas las de `.env.example`. Scoping por entorno:
 | `PUBLIC_SITE_URL` | `https://<subdominio>` | `$VERCEL_URL` | `http://localhost:4321` |
 | `VERCEL_DEPLOY_HOOK_URL` | hook real | **vacía** | vacía |
 | `ALLOW_PUBLIC_SIGNUP` | `false` (tras crear cuentas) | `true` | `true` |
+| `CLOUDINARY_CLOUD_NAME` | el de la cuenta | el mismo | el mismo |
+| `CLOUDINARY_API_KEY` | la clave | la misma | la misma |
+| `CLOUDINARY_API_SECRET` | el secreto | el mismo | el mismo |
+| `CLOUDINARY_FOLDER` | `landing-laboratorio` | `landing-laboratorio` | `landing-laboratorio` |
 
 > **`VERCEL_DEPLOY_HOOK_URL` vacía en Preview es obligatorio.** El hook apunta a `main`:
 > si un preview de una rama lo dispara, publica producción desde otra rama. Bug silencioso y grave.
@@ -1498,6 +1503,285 @@ validen, y que haya al menos una cuenta.
 
 ---
 
+---
+
+## TANDA 11 — Gestión de imágenes con Cloudinary
+
+**Objetivo:** que el administrador pueda **reemplazar** las imágenes de la landing desde el
+panel, sin poder alterar cuántas hay ni dónde van, y que el cambio se publique por el mismo
+mecanismo de redespliegue de la Tanda 7.
+
+### 11.0 La decisión que hace cumplible el requisito
+
+El requisito «solo reemplazar, nunca añadir» no se puede garantizar con una restricción de UI:
+ocultar un botón no impide un POST directo a la action, y la Tanda 6 ya demostró que las actions
+son endpoints alcanzables con `curl`.
+
+**Las ranuras (slots) se declaran en CÓDIGO, no en datos.**
+
+```
+src/lib/images/slots.ts   →  registro cerrado de slots válidos (fuente de verdad)
+landing_images            →  colección en MongoDB: una fila POR slot existente
+```
+
+La API de subida rechaza cualquier `slotId` que no esté en el registro. Consecuencias:
+
+- **Añadir una imagen es imposible sin un despliegue de código.** No es una convención de la
+  interfaz: es estructural.
+- El layout no puede cambiar desde el panel, porque el número de ranuras no es un dato editable.
+- Un bug o una escritura directa en la base tampoco pueden crear una ranura: la landing solo
+  renderiza slots que existen en el registro.
+
+> **Tensión con la Tanda 6 que hay que decidir.** Hoy el panel permite **añadir y quitar items**
+> en 6 repeaters (estudios, categorías, beneficios, testimonios, videos, preguntas). Si las
+> imágenes vivieran dentro de cada item del repeater, agregar un estudio crearía una ranura nueva
+> y alteraría el layout — exactamente lo que este requisito prohíbe.
+>
+> **Resolución adoptada:** las imágenes NO viven dentro de los repeaters. Viven en
+> `landing_images`, indexadas por `slotId` del registro. Un repeater y su slot se emparejan por
+> índice a través del registro.
+>
+> **Consecuencia que el cliente debe aceptar:** si añade un 7.º estudio desde el panel, esa
+> tarjeta **no tendrá imagen** hasta que se agregue su slot en código. Es el precio de que el
+> layout sea inalterable desde el panel. La alternativa (imágenes dentro del repeater) haría el
+> requisito incumplible.
+
+### 11.1 Registro de slots
+
+`src/lib/images/slots.ts`:
+
+```ts
+export type ImageSlot = {
+  /** Id estable. Es también el `public_id` en Cloudinary (sin la carpeta). */
+  id: string;
+  /** Sección de la landing a la que pertenece. */
+  section: SectionKey;
+  /** Etiqueta para el panel: debe nombrar la tarjeta concreta. */
+  label: string;
+  /** Proporción con la que se renderiza. Fija el alto reservado (CLS = 0). */
+  aspect: '1/1' | '4/3' | '4/5' | '16/9';
+  /** Ancho máximo al que se muestra, para generar el srcset. */
+  displayWidth: number;
+};
+
+export const IMAGE_SLOTS: ImageSlot[] = [ /* ... */ ];
+export const SLOT_IDS = IMAGE_SLOTS.map((s) => s.id);
+export function isSlotId(v: unknown): v is string { /* ... */ }
+```
+
+Propuesta inicial de slots, derivada del layout actual — **requiere confirmación del cliente**,
+porque define qué tendrá imagen y qué no:
+
+| `slotId` | Sección | Tarjeta / uso | Proporción |
+|---|---|---|---|
+| `hero-principal` | `hero` | Imagen principal del hero | `16/9` |
+| `estudio-biometria-hematica` | `estudios_principales` | Biometría hemática | `4/3` |
+| `estudio-quimica-sanguinea` | `estudios_principales` | Química sanguínea | `4/3` |
+| `estudio-examen-orina` | `estudios_principales` | Examen general de orina | `4/3` |
+| `estudio-hemoglobina-glucosilada` | `estudios_principales` | Hemoglobina glucosilada | `4/3` |
+| `estudio-perfil-lipidos` | `estudios_principales` | Perfil de lípidos | `4/3` |
+| `estudio-perfil-tiroideo` | `estudios_principales` | Perfil tiroideo | `4/3` |
+| `video-1` … `video-7` | `videos` | Miniaturas de los 7 posts de Instagram | `4/5` |
+
+Total: **14 ranuras**. Los 7 `video-*` sustituyen al campo `thumbnail` que hoy vive dentro de
+`videos.items[]` (ver 11.6, migración).
+
+> **`hero-principal` es el LCP de la página.** Debe renderizarse con `loading="eager"` y
+> `fetchpriority="high"`; todas las demás con `loading="lazy"`. Es la única imagen que puede
+> mover la métrica de Core Web Vitals.
+
+### 11.2 Modelo de datos
+
+Colección nueva, **separada de `landing_sections`**: el texto y las imágenes se editan por vías
+distintas y tienen ciclos de vida distintos.
+
+```jsonc
+// landing_images — un documento por slot; `_id` es el slotId
+{
+  "_id": "estudio-biometria-hematica",
+  "publicId": "landing-laboratorio/estudio-biometria-hematica",
+  "version": 1790400000,          // para invalidar caché del CDN al reemplazar
+  "width": 1600,
+  "height": 1200,
+  "format": "webp",
+  "bytes": 84213,
+  "alt": "Tubo de muestra de sangre en el laboratorio",
+  "updatedAt": ISODate,
+  "updatedBy": { "userId": "...", "name": "...", "email": "..." }
+}
+```
+
+**Se guarda `publicId` + `version`, NO la URL completa.** Motivo: una URL almacenada congela las
+transformaciones dentro del dato. El día que se cambie el ancho de las tarjetas o se quiera
+servir AVIF, habría que migrar 14 documentos. Con el `publicId`, la capa de render decide las
+transformaciones y un cambio de diseño no toca la base.
+
+`alt` es **obligatorio** y lo escribe el administrador: la auditoría `npm run a11y:html` exige
+que toda `<img>` lo tenga, y una imagen de contexto médico sin texto alternativo es una barrera
+real, no un detalle formal.
+
+`width`/`height` vienen de la respuesta de Cloudinary y se guardan para emitirlos en el HTML:
+sin ellos el layout salta al cargar (CLS), y la misma auditoría lo verifica.
+
+### 11.3 Variables de entorno
+
+El proyecto usa cuatro variables, **ya configuradas en Vercel** por el cliente:
+
+| Variable | Uso | Expuesta al navegador |
+|---|---|---|
+| `CLOUDINARY_CLOUD_NAME` | Construir las URLs de entrega | No (se inyecta en el HTML ya renderizado) |
+| `CLOUDINARY_API_KEY` | Firmar la subida | **No** |
+| `CLOUDINARY_API_SECRET` | Firmar la subida | **No, nunca** |
+| `CLOUDINARY_FOLDER` | Carpeta de destino: `landing-laboratorio` | No |
+
+> **PENDIENTE (verificado en la Tanda 11): las cuatro variables NO están en el `.env` local ni
+> en `.env.example`.** Al implementar hay que:
+> 1. añadirlas a `.env.example` sin comillas, como el resto;
+> 2. añadirlas al bloque de variables por entorno de la sección 10.1;
+> 3. añadir su comprobación a `scripts/preflight.mjs` (obligatorias, y que `CLOUDINARY_FOLDER`
+>    valga `landing-laboratorio`).
+>
+> Ninguna lleva prefijo `PUBLIC_`. `CLOUDINARY_API_SECRET` en el bundle del navegador permitiría
+> a cualquiera subir, transformar y **borrar** los assets de la cuenta.
+
+### 11.4 Subida: estrategia de reemplazo
+
+```
+Admin elige archivo
+      │
+      ▼
+[1] Validación en cliente (accept + tamaño)   ← comodidad, NO seguridad
+      │
+      ▼
+[2] Action `images.replace` (servidor)
+      ├─ revalida la sesión            (las actions son endpoints POST directos)
+      ├─ rechaza slotId fuera del registro
+      ├─ valida el tipo por BYTES, no por extensión ni MIME declarado
+      ├─ valida el tamaño (máx. 5 MB)
+      └─ sube a Cloudinary:
+             public_id : `${CLOUDINARY_FOLDER}/${slotId}`   ← DETERMINISTA
+             overwrite : true
+             invalidate: true
+      │
+      ▼
+[3] `updateOne({_id: slotId}, {$set: {...}}, {upsert: true})` en landing_images
+      │
+      ▼
+[4] `recordChange()`  → alimenta /admin/usuarios (Tanda 8)
+      │
+      ▼
+[5] `triggerDeploy()` → mismo debounce y mismos 4 mensajes de la Tanda 7
+```
+
+**`public_id` determinista con `overwrite: true` es la decisión central del reemplazo.** Efectos:
+
+- **No se acumulan huérfanos.** Cada slot tiene un único asset en Cloudinary, para siempre. No
+  hace falta un endpoint de borrado — y no tenerlo reduce la superficie de daño.
+- **La URL base no cambia**, así que un fallo a mitad del flujo no deja la landing sin imagen:
+  sigue sirviendo la anterior.
+- `invalidate: true` purga el CDN de Cloudinary; el `version` guardado fuerza además una URL
+  nueva, que es lo que hace el cambio visible de inmediato en lugar de esperar propagación.
+
+**La validación de tipo va por bytes, no por extensión.** El atributo `accept` del input y el
+`Content-Type` del envío los controla el cliente y se falsifican trivialmente. Se comprueban las
+firmas mágicas: `89 50 4E 47` (PNG), `FF D8 FF` (JPEG), `RIFF....WEBP` (WebP). **SVG queda
+excluido** por el requisito y además porque puede contener `<script>`.
+
+Formatos aceptados: **`.png`, `.jpg`, `.jpeg`, `.webp`**. Nada más.
+
+La action usa `accept: 'form'` (no `'json'`) porque recibe un `File` dentro de `FormData`.
+
+### 11.5 UI del panel
+
+`src/components/admin/ImageSlotField.tsx`, un island de React por ranura:
+
+- Vista previa de la imagen **actual**, con su proporción reservada.
+- Botón **«Reemplazar imagen»** — nunca «Añadir». No existe botón de eliminar: una ranura del
+  layout no puede quedar vacía.
+- `<input type="file" accept=".png,.jpg,.jpeg,.webp" />`
+- Campo de texto para el `alt`, con su etiqueta y obligatorio.
+- Leyenda fija bajo el input, con este texto literal:
+
+  > **Recomendación:** Sube la imagen en formato WebP para mejorar la velocidad de carga de la web.
+
+- Estados: `idle` → `subiendo` (botón deshabilitado + spinner) → toast de 4.5 s reutilizando el
+  patrón de `SectionEditor` (acuse efímero, `role="status"`, `aria-live="polite"`).
+- Si el archivo excede 5 MB o no es un formato aceptado, se avisa **antes** de subir.
+
+**Dónde vive en el panel.** Cada slot se edita desde la página de su sección
+(`/admin/contenido/[key]`), agrupado bajo un bloque «Imágenes de esta sección», para que el
+administrador vea texto e imagen del mismo bloque en un solo lugar. El registro se filtra por
+`slot.section === key`.
+
+> El uploader **no** se añade al `FIELD_MAP` de la Tanda 6. Ese mapa describe campos del
+> documento de la sección, y las imágenes viven en otra colección con otro flujo de guardado
+> (subida inmediata, no «guardar cambios»). Mezclarlos obligaría a que el formulario de texto
+> supiera de archivos.
+
+### 11.6 Render en la landing
+
+`src/lib/images/url.ts`:
+
+```ts
+export function cloudinaryUrl(img: ImageDoc, width: number): string
+export function cloudinarySrcSet(img: ImageDoc, slot: ImageSlot): string
+```
+
+- Transformaciones por defecto: `f_auto,q_auto,dpr_auto,c_limit`.
+  `f_auto` entrega AVIF o WebP según lo que soporte el navegador, así que una imagen subida como
+  JPEG se sirve optimizada igualmente — la recomendación de WebP del panel ayuda al peso del
+  original, no al de la entrega.
+- `srcset` con anchos `[displayWidth, displayWidth*1.5, displayWidth*2]` y el `sizes` del slot.
+- `width`/`height` siempre en el HTML, desde el documento.
+- `loading="lazy"` en todas menos `hero-principal`.
+- Si un slot no tiene documento en la base, se renderiza el placeholder con degradado que ya
+  existe en `Videos.astro`, con la misma proporción. **La landing nunca depende de que una imagen
+  exista.**
+
+`repository.ts` gana `getLandingImages(): Promise<Record<string, ImageDoc>>`, con **una sola
+query**, y con el mismo fallback tolerante de la Tanda 2: si Atlas falla en el build, se
+renderizan los placeholders y se registra un warning, en lugar de romper el deploy.
+
+**Migración de los `thumbnail` actuales.** `videos.items[].thumbnail` se elimina del esquema y se
+sustituye por los slots `video-1`…`video-7`. Al ser hoy cadenas vacías, la migración es borrar el
+campo del esquema y de los 7 items; no hay dato que preservar.
+
+### 11.7 CSP
+
+`img-src` ya es `'self' data: https:`, así que `res.cloudinary.com` está permitido sin cambios.
+
+> **Endurecimiento recomendado:** restringirlo a
+> `img-src 'self' data: https://res.cloudinary.com` en lugar de cualquier host `https:`. Reduce
+> el margen de un XSS para exfiltrar datos por la URL de una imagen. Es un cambio de una línea en
+> `vercel.json` y solo se puede hacer cuando ya no queden imágenes de otros orígenes.
+
+### 11.8 Criterios de aceptación Tanda 11
+
+- [ ] `npm run preflight` falla si falta alguna de las 4 variables de Cloudinary.
+- [ ] Subir un PNG a `estudio-biometria-hematica` actualiza `landing_images`, deja
+      `updatedBy` con el usuario correcto y dispara el Deploy Hook.
+- [ ] El `publicId` del documento es exactamente `landing-laboratorio/<slotId>`.
+- [ ] Reemplazar la misma ranura **dos veces** deja **un solo** asset en Cloudinary
+      (verificar en el panel de Media Library) y el `version` cambia.
+- [ ] Tras el rebuild, la landing sirve la imagen nueva y el `<img>` lleva `width`, `height` y
+      `alt`.
+- [ ] `POST` a la action con un `slotId` inventado → **400**, y no se crea ningún documento.
+- [ ] `POST` sin sesión → **401**.
+- [ ] Subir un `.svg` renombrado a `.png` → **rechazado** (la validación es por bytes).
+- [ ] Subir un archivo de 8 MB → rechazado antes de llegar a Cloudinary.
+- [ ] Un slot sin documento renderiza el placeholder, con el mismo `aspect-ratio`, y la landing
+      no rompe.
+- [ ] `npm run a11y:html` sigue en verde: toda `<img>` con `alt`, `width` y `height`.
+- [ ] Con Atlas caído, el build emite placeholders y un warning, no un error.
+- [ ] La UI no ofrece en ningún punto «añadir» ni «eliminar» imagen, solo «Reemplazar».
+
+### 11.9 Fuera de alcance
+
+Recortes o reencuadre desde el panel · galerías · biblioteca de medios navegable · borrado de
+assets · subida múltiple · imágenes en secciones sin slot declarado. Todo ello implicaría que el
+administrador pueda cambiar la cantidad de imágenes o el layout, que es justo lo que este diseño
+impide por construcción.
+
 ## Apéndice A — Riesgos identificados y mitigación
 
 | # | Riesgo | Impacto | Mitigación |
@@ -1528,6 +1812,11 @@ validen, y que haya al menos una cuenta.
 | 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
 | 28 | **Paleta entregada sin contraste AA en tema Light** | CTA principal a 3.74:1 y links a 3.49:1: ilegibles para baja visión en un sitio de salud | Bajado un paso cada familia (`#0f766e`, `#0369a1`). Auditoría automatizada en `npm run a11y:contrast`. |
 | 29 | Borde de controles a 1.16:1 | Los inputs son casi invisibles (WCAG 1.4.11 pide 3:1) | `--c-border-strong` para inputs y botones con borde. |
+| 33 | Imágenes dentro de los repeaters de la Tanda 6 | Añadir un item crearía una ranura y alteraría el layout — lo que el requisito prohíbe | Las ranuras se declaran en **código** (`slots.ts`), no en datos. Colección `landing_images` aparte, indexada por `slotId`. |
+| 34 | Validar el tipo de archivo por extensión o `Content-Type` | Ambos los controla el cliente: un `.svg` con `<script>` renombrado a `.png` pasaría | Validación por **firmas mágicas** de los bytes en el servidor. SVG excluido. |
+| 35 | `public_id` aleatorio por subida | Se acumulan assets huérfanos en Cloudinary y haría falta un endpoint de borrado | `public_id` determinista por slot + `overwrite: true` + `invalidate: true`. Un asset por ranura, para siempre. |
+| 36 | Guardar la URL completa de Cloudinary | Congela las transformaciones en el dato: cambiar el ancho de una tarjeta exigiría migrar documentos | Se guarda `publicId` + `version`; la URL se construye en la capa de render. |
+| 37 | `CLOUDINARY_API_SECRET` con prefijo `PUBLIC_` | Cualquiera podría subir, transformar y **borrar** los assets de la cuenta | Subida solo en servidor. `preflight` ya detecta secretos con prefijo `PUBLIC_`. |
 | 31 | **`astro build` NO hace type-check** | Dos errores de tipos en `deploy.ts` vivieron desde la Tanda 7 con el build en verde | `npm run check` es el chequeo real, y hay que leer la línea de errores completa, no recortar la salida. |
 | 32 | Índice `[key: string]: unknown` en un doc con `$inc` | El operador no compila: el driver deriva los campos incrementables de los que TS ve numéricos | Vista tipada de la misma colección (`DeployStateDoc`). |
 | 30 | `"Inter"` en el stack sin servir el archivo | El diseño cambia según las fuentes instaladas en la máquina del visitante | Stack del sistema puro, sin fuente web. |
@@ -1538,8 +1827,11 @@ validen, y que haya al menos una cuenta.
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
 
 Roles/permisos · 2FA · recuperación de contraseña · verificación de email · log histórico de
-cambios · versionado o preview de borradores · subida de imágenes desde el dashboard ·
-i18n · formulario de contacto con backend · analytics.
+cambios · versionado o preview de borradores · i18n · formulario de contacto con backend ·
+analytics.
+
+> La gestión de imágenes con Cloudinary, que originalmente estaba aquí, pasó a ser la
+> **Tanda 11** con arquitectura propia.
 
 **Extensión natural futura, ya habilitada por el diseño:** `landing_sections` con
 `{ status: 'draft'|'published' }` + un `?preview=token` en una ruta SSR daría vista previa sin
