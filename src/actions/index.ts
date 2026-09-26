@@ -8,9 +8,18 @@ import {
   isSectionKey,
   type SectionKey,
 } from '../lib/content/schemas.ts';
-import { setSection } from '../lib/content/repository.ts';
+import { getSection, setSection } from '../lib/content/repository.ts';
 import { getDeployState, triggerDeploy } from '../lib/deploy.ts';
 import { getSlot, isSlotId } from '../lib/images/slots.ts';
+import {
+  CARD_IMAGE_GROUPS,
+  cardGroupFor,
+  cardPublicId,
+  cardSlot,
+  newImageKey,
+} from '../lib/images/cards.ts';
+import type { ImageSlot } from '../lib/images/slots.ts';
+import { getImagesCollection } from '../lib/mongo.ts';
 import { setSlotImage } from '../lib/images/repository.ts';
 import { MAX_BYTES, sniffImageType, uploadToSlot } from '../lib/images/cloudinary.ts';
 
@@ -32,6 +41,73 @@ function requireUser(locals: App.Locals) {
   return locals.user;
 }
 
+/**
+ * Asigna `imageKey` a las tarjetas que no lo tengan y conserva los existentes.
+ * Devuelve el dato intacto si la sección no tiene grupo de imágenes de tarjeta.
+ */
+async function ensureImageKeys(key: SectionKey, data: unknown): Promise<unknown> {
+  const group = cardGroupFor(key);
+  if (!group || typeof data !== 'object' || data === null) return data;
+
+  const record = data as Record<string, unknown>;
+  const items = record[group.path];
+  if (!Array.isArray(items)) return data;
+
+  // Claves legítimas: las que ya están guardadas en la base.
+  const stored = await getSection(key);
+  const storedItems = (stored as Record<string, unknown>)[group.path];
+  const known = new Set(
+    Array.isArray(storedItems)
+      ? storedItems
+          .map((item) => (item as { imageKey?: unknown })?.imageKey)
+          .filter((k): k is string => typeof k === 'string')
+      : [],
+  );
+
+  const used = new Set<string>();
+  const next = items.map((item) => {
+    const candidate = (item as { imageKey?: unknown })?.imageKey;
+    const valid =
+      typeof candidate === 'string' && known.has(candidate) && !used.has(candidate);
+    const imageKey = valid ? (candidate as string) : newImageKey();
+    used.add(imageKey);
+    return { ...(item as object), imageKey };
+  });
+
+  return { ...record, [group.path]: next };
+}
+
+/**
+ * Resuelve `<path>:<imageKey>` comprobando que la tarjeta exista de verdad.
+ *
+ * Reutiliza el `publicId` de la fila ya guardada si la hay: los seis estudios
+ * originales tienen assets con nombres en español (`Perfil_Tiroideo`), y
+ * regenerar el id los dejaría huérfanos en Cloudinary.
+ */
+async function resolveCardSlot(slotId: string): Promise<ImageSlot | null> {
+  const separator = slotId.indexOf(':');
+  if (separator < 0) return null;
+
+  const path = slotId.slice(0, separator);
+  const imageKey = slotId.slice(separator + 1);
+  const group = CARD_IMAGE_GROUPS.find((g) => g.path === path);
+  if (!group || imageKey.length === 0) return null;
+
+  const section = await getSection(group.section);
+  const items = (section as Record<string, unknown>)[group.path];
+  if (!Array.isArray(items)) return null;
+
+  const item = items.find(
+    (candidate) => (candidate as { imageKey?: unknown })?.imageKey === imageKey,
+  ) as Record<string, unknown> | undefined;
+  if (!item) return null;
+
+  const existing = await (await getImagesCollection()).findOne({ _id: slotId });
+  const title = String(item[group.titleField] ?? 'Tarjeta');
+
+  return cardSlot(group, imageKey, title, existing?.publicId ?? cardPublicId(group, imageKey));
+}
+
 export const server = {
   content: {
     updateSection: defineAction({
@@ -50,7 +126,18 @@ export const server = {
           throw new ActionError({ code: 'BAD_REQUEST', message: `Sección desconocida: ${key}` });
         }
 
-        const parsed = SECTION_SCHEMAS[key].safeParse(data);
+        /**
+         * Los `imageKey` los gobierna el SERVIDOR, no el cliente.
+         *
+         * El panel recibe el documento completo y lo devuelve entero al
+         * guardar, así que un cliente manipulado podría inventar claves y
+         * apropiarse de la imagen de otra tarjeta. Aquí solo se aceptan claves
+         * que YA existen en el documento almacenado; cualquier otra se
+         * descarta y se genera una nueva.
+         */
+        const withKeys = await ensureImageKeys(key as SectionKey, data);
+
+        const parsed = SECTION_SCHEMAS[key].safeParse(withKeys);
         if (!parsed.success) {
           // Se devuelven los errores por campo para que el formulario pueda
           // señalarlos, no solo un mensaje global.
@@ -112,13 +199,27 @@ export const server = {
       handler: async ({ slotId, alt, file }, context) => {
         const user = requireUser(context.locals);
 
-        if (!isSlotId(slotId)) {
+        /**
+         * Dos tipos de ranura, ambas verificadas contra el servidor:
+         *
+         *  - FIJA: tiene que estar en el registro de `slots.ts`. Su número no
+         *    cambia nunca.
+         *  - DE TARJETA: `<path>:<imageKey>`. Se acepta solo si ese `imageKey`
+         *    existe realmente en el documento de la sección. Así, inventar una
+         *    clave no crea una ranura: primero hay que crear la tarjeta.
+         */
+        const slot = isSlotId(slotId)
+          ? getSlot(slotId)!
+          : await resolveCardSlot(slotId);
+
+        if (!slot) {
           throw new ActionError({
             code: 'BAD_REQUEST',
-            message: `Ranura desconocida: ${slotId}. Las ranuras se definen en código.`,
+            message:
+              `Ranura desconocida: ${slotId}. Las ranuras fijas se definen en código, ` +
+              'y las de tarjeta solo existen si la tarjeta existe.',
           });
         }
-        const slot = getSlot(slotId)!;
 
         if (file.size === 0) {
           throw new ActionError({ code: 'BAD_REQUEST', message: 'El archivo está vacío.' });

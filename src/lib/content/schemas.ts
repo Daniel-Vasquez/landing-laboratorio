@@ -27,6 +27,17 @@ export const heroSchema = z.object({
 const estudio = z.object({
   nombre: z.string().min(3).max(80),
   descripcion: z.string().min(10).max(300),
+  /**
+   * Identificador INMUTABLE de la tarjeta, usado para asociarle su imagen.
+   *
+   * Lo genera y lo conserva el SERVIDOR (ver la action `content.updateSection`):
+   * el panel nunca lo muestra ni lo edita. Gracias a él, renombrar un estudio
+   * NO pierde su imagen — el emparejamiento no depende del texto.
+   *
+   * Opcional porque una tarjeta recién creada todavía no lo tiene: se le asigna
+   * al guardar.
+   */
+  imageKey: z.string().max(32).optional(),
 });
 
 export const estudiosPrincipalesSchema = z.object({

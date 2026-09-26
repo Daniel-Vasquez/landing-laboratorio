@@ -29,9 +29,16 @@ type DeployOutcome = DeployResult;
 interface Props {
   sectionKey: SectionKey;
   initialData: unknown;
+  /** `imageKey`s de las tarjetas que ya tienen imagen subida. */
+  imageKeysWithImage?: string[];
 }
 
-export default function SectionEditor({ sectionKey, initialData }: Props) {
+export default function SectionEditor({
+  sectionKey,
+  initialData,
+  imageKeysWithImage = [],
+}: Props) {
+  const withImage = useMemo(() => new Set(imageKeysWithImage), [imageKeysWithImage]);
   /**
    * `pristine` es la última versión CONFIRMADA por el servidor, y es estado,
    * no un `useMemo` sobre `initialData`.
@@ -185,6 +192,7 @@ export default function SectionEditor({ sectionKey, initialData }: Props) {
           items={items}
           onChange={(next) => update(absolutePath, next)}
           renderItemField={(sub, subPath) => renderField(sub, subPath)}
+          imageKeysWithImage={withImage}
         />
       );
     }

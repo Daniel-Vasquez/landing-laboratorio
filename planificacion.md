@@ -1532,7 +1532,23 @@ La API de subida rechaza cualquier `slotId` que no esté en el registro. Consecu
 - Un bug o una escritura directa en la base tampoco pueden crear una ranura: la landing solo
   renderiza slots que existen en el registro.
 
-> **Tensión con la Tanda 6 que hay que decidir.** Hoy el panel permite **añadir y quitar items**
+> **RESUELTO (cambio de requisito del cliente).** La regla pasó a ser: las secciones de imagen
+> ÚNICA siguen siendo fijas (`hero`, `deteccion-oportuna`, `cta-final`, `faq-fondo`), pero los
+> grids cuyas tarjetas llevan imagen **sí** ganan una ranura al añadir una tarjeta.
+>
+> Implementación: cada tarjeta lleva un `imageKey` inmutable que asigna y conserva el SERVIDOR;
+> su fila vive en `landing_images/<path>:<imageKey>`. Qué repeaters tienen imagen sigue
+> declarándose en código (`src/lib/images/cards.ts`), así que añadir imágenes a los testimonios
+> o al acordeón exige un despliegue — lo que crece es el número de tarjetas, no el de secciones
+> con imagen.
+>
+> **El aviso al renombrar dejó de tener sentido y NO se implementó.** Con emparejamiento por
+> `imageKey`, renombrar una tarjeta conserva su imagen (verificado). El riesgo real pasa a ser
+> **eliminar** la tarjeta, y ahí sí se pide confirmación, indicando qué se pierde.
+>
+> El texto de abajo describe el diseño ANTERIOR, previo a este cambio.
+
+> **Tensión con la Tanda 6 (histórico).** Hoy el panel permite **añadir y quitar items**
 > en 6 repeaters (estudios, categorías, beneficios, testimonios, videos, preguntas). Si las
 > imágenes vivieran dentro de cada item del repeater, agregar un estudio crearía una ranura nueva
 > y alteraría el layout — exactamente lo que este requisito prohíbe.

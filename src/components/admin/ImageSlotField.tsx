@@ -9,7 +9,8 @@ const TOAST_MS = 4500;
 type Toast = { tone: 'success' | 'error'; message: string; id: number };
 
 interface Props {
-  slot: ImageSlot;
+  /** `slot` es nombre reservado al usarlo desde Astro. */
+  imageSlot: ImageSlot;
   /** URL de la imagen actual. `null` si la ranura está vacía. */
   currentUrl: string | null;
   currentAlt: string;
@@ -17,7 +18,12 @@ interface Props {
   decorative: boolean;
 }
 
-export default function ImageSlotField({ slot, currentUrl, currentAlt, decorative }: Props) {
+export default function ImageSlotField({
+  imageSlot: slot,
+  currentUrl,
+  currentAlt,
+  decorative,
+}: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [alt, setAlt] = useState(currentAlt);

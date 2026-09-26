@@ -14,7 +14,8 @@
     "a11y:contrast": "node scripts/contrast-audit.mjs",
     "a11y:html": "node scripts/a11y-audit.mjs",
     "preflight": "node scripts/preflight.mjs",
-    "db:seed-images": "node --env-file=.env scripts/seed-images.ts"
+    "db:seed-images": "node --env-file=.env scripts/seed-images.ts",
+    "db:migrate-card-images": "node --env-file=.env scripts/migrate-card-images.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",

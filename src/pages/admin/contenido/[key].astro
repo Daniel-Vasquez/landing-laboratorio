@@ -6,6 +6,7 @@ import { getSection } from '../../../lib/content/repository.ts';
 import { isMongoConfigured } from '../../../lib/mongo.ts';
 import { SECTION_LABELS, isSectionKey } from '../../../lib/content/schemas.ts';
 import { slotsForSection } from '../../../lib/images/slots.ts';
+import { cardGroupFor, cardSlot, cardSlotKey } from '../../../lib/images/cards.ts';
 import { getLandingImages } from '../../../lib/images/repository.ts';
 import { cloudinaryUrl } from '../../../lib/images/url.ts';
 import ImageSlotField from '../../../components/admin/ImageSlotField.tsx';
@@ -44,34 +45,81 @@ const label = SECTION_LABELS[key];
  * otro flujo: se suben de inmediato, una a una. Mezclarlos obligaría al
  * formulario de texto a saber de archivos.
  */
-const slots = slotsForSection(key);
-const images = slots.length > 0 ? await getLandingImages() : {};
+const fixedSlots = slotsForSection(key);
+
+/**
+ * Ranuras de tarjeta: una por item del grid, derivadas del contenido y no del
+ * registro. Aquí es donde el número de imágenes SÍ crece: añadir una tarjeta
+ * desde el editor de arriba hace aparecer su ranura al guardar.
+ */
+const group = cardGroupFor(key);
+const cardItems = group
+  ? ((data as Record<string, unknown>)[group.path] as
+      | Array<Record<string, unknown>>
+      | undefined) ?? []
+  : [];
+
+const images = fixedSlots.length > 0 || cardItems.length > 0 ? await getLandingImages() : {};
+
+const cardSlots = group
+  ? cardItems
+      .filter((item) => typeof item.imageKey === 'string')
+      .map((item) => {
+        const imageKey = item.imageKey as string;
+        const stored = images[cardSlotKey(group, imageKey)];
+        return cardSlot(group, imageKey, String(item[group.titleField] ?? 'Tarjeta'), stored?.publicId);
+      })
+  : [];
+
+const allSlots = [...fixedSlots, ...cardSlots];
+
+// Tarjetas que aún no tienen imageKey: se les asigna al guardar el contenido.
+const pendingCards = group ? cardItems.filter((item) => typeof item.imageKey !== 'string').length : 0;
 ---
 <AdminLayout title={label} description="Editar contenido de la sección" user={user}>
   {!dbReachable && (
     <DbErrorBanner error="No se pudo confirmar la conexión con MongoDB. Lo que ves puede ser contenido semilla y el guardado fallará." />
   )}
 
-  <SectionEditor client:load sectionKey={key} initialData={data} />
+  <SectionEditor
+    client:load
+    sectionKey={key}
+    initialData={data}
+    imageKeysWithImage={cardSlots
+      .filter((slot) => images[slot.id])
+      .map((slot) => slot.id.slice(slot.id.indexOf(':') + 1))}
+  />
 
   {
-    slots.length > 0 && (
+    allSlots.length > 0 && (
       <section class="mt-8" aria-labelledby="imagenes">
         <h2 id="imagenes" class="text-sm font-semibold uppercase tracking-wide text-fg-muted">
           Imágenes de esta sección
         </h2>
         <p class="mt-1.5 text-sm text-fg-muted">
-          Solo se pueden reemplazar. El número de imágenes y su posición forman parte del diseño
-          y no se editan desde aquí.
+          {group
+            ? 'Cada tarjeta tiene su propia imagen. Al agregar una tarjeta nueva y guardar, su ranura aparece aquí.'
+            : 'Solo se pueden reemplazar. El número de imágenes y su posición forman parte del diseño y no se editan desde aquí.'}
         </p>
 
+        {pendingCards > 0 && (
+          <p
+            role="status"
+            class="mt-3 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3.5 py-2.5 text-sm text-sky-900 dark:text-sky-200"
+          >
+            {pendingCards === 1
+              ? 'Hay 1 tarjeta nueva sin imagen. Guarda los cambios de arriba para que aparezca su ranura.'
+              : `Hay ${pendingCards} tarjetas nuevas sin imagen. Guarda los cambios de arriba para que aparezcan sus ranuras.`}
+          </p>
+        )}
+
         <div class="mt-4 space-y-4">
-          {slots.map((slot) => {
+          {allSlots.map((slot) => {
             const image = images[slot.id];
             return (
               <ImageSlotField
                 client:load
-                slot={slot}
+                imageSlot={slot}
                 currentUrl={image ? cloudinaryUrl(image, 400) : null}
                 currentAlt={image?.alt ?? ''}
                 decorative={slot.altDefault === null}

@@ -6,10 +6,33 @@ interface Props {
   items: unknown[];
   onChange: (items: unknown[]) => void;
   renderItemField: (field: Field, absolutePath: string) => React.ReactNode;
+  /**
+   * Claves de imagen que YA tienen una imagen subida. Sirve para advertir antes
+   * de eliminar una tarjeta cuya imagen se perdería.
+   */
+  imageKeysWithImage?: ReadonlySet<string>;
 }
 
-export default function RepeaterField({ field, items, onChange, renderItemField }: Props) {
+export default function RepeaterField({
+  field,
+  items,
+  onChange,
+  renderItemField,
+  imageKeysWithImage,
+}: Props) {
   const atMax = items.length >= field.max;
+
+  /**
+   * ¿Este item tiene una imagen asociada que se perdería al borrarlo?
+   *
+   * Renombrar una tarjeta NO pierde la imagen: el emparejamiento es por
+   * `imageKey`, un id inmutable. Eliminarla sí, y de forma irreversible, así
+   * que ese es el único punto donde tiene sentido advertir.
+   */
+  function hasImage(item: unknown): boolean {
+    const key = (item as { imageKey?: unknown })?.imageKey;
+    return typeof key === 'string' && Boolean(imageKeysWithImage?.has(key));
+  }
 
   function move(from: number, to: number) {
     if (to < 0 || to >= items.length) return;
@@ -20,6 +43,17 @@ export default function RepeaterField({ field, items, onChange, renderItemField 
   }
 
   function remove(index: number) {
+    const item = items[index];
+    if (hasImage(item)) {
+      const name = itemTitle(item, index);
+      const confirmed = window.confirm(
+        `«${name}» tiene una imagen.\n\n` +
+          'Si eliminas esta tarjeta, su imagen dejará de mostrarse en la web y tendrás ' +
+          'que volver a subirla si la recuperas más adelante.\n\n' +
+          '¿Eliminar la tarjeta de todos modos?',
+      );
+      if (!confirmed) return;
+    }
     onChange(items.filter((_, i) => i !== index));
   }
 
@@ -51,6 +85,19 @@ export default function RepeaterField({ field, items, onChange, renderItemField 
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
                 <span className="mr-2 font-mono text-xs text-fg-muted">{index + 1}</span>
                 {itemTitle(item, index)}
+                {hasImage(item) && (
+                  <span
+                    className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-fg-muted"
+                    title="Esta tarjeta tiene una imagen asociada"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-3.5" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L4 21" />
+                    </svg>
+                    con imagen
+                  </span>
+                )}
               </span>
 
               {/* aria-label explícito: "↑" no dice nada a un lector de pantalla. */}

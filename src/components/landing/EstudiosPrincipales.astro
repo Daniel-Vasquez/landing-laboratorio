@@ -1,7 +1,7 @@
 ---
 import type { LandingContent } from '../../lib/content/schemas.ts';
 import type { LandingImages } from '../../lib/images/repository.ts';
-import { slotForCardName } from '../../lib/images/slots.ts';
+import { cardGroupFor, cardSlot, cardSlotKey } from '../../lib/images/cards.ts';
 import Section from './Section.astro';
 import Button from '../ui/Button.astro';
 import SlotImage from './SlotImage.astro';
@@ -11,6 +11,7 @@ interface Props {
   images: LandingImages;
 }
 const { data, images } = Astro.props;
+const group = cardGroupFor('estudios_principales')!;
 ---
 <Section id="estudios" tone="muted" eyebrow={data.eyebrow} title="Los estudios más solicitados">
   <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>
@@ -18,19 +19,22 @@ const { data, images } = Astro.props;
   <ul class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {data.estudios.map((estudio) => {
       /*
-       * El emparejamiento es por NOMBRE normalizado, no por posición: reordenar
-       * los estudios desde el panel no debe descolocar las imágenes.
-       * Una tarjeta añadida desde el panel no tiene ranura, así que se renderiza
-       * sin bloque de imagen — no con un hueco vacío.
+       * El emparejamiento es por `imageKey`, un id inmutable que el servidor
+       * asigna a cada tarjeta. Ni renombrarla ni reordenarla afecta a su imagen.
+       * Una tarjeta recién creada aún no tiene imagen: se renderiza sin el
+       * bloque, no con un hueco vacío.
        */
-      const slot = slotForCardName(estudio.nombre);
+      const image = estudio.imageKey ? images[cardSlotKey(group, estudio.imageKey)] : undefined;
+      const slot = estudio.imageKey
+        ? cardSlot(group, estudio.imageKey, estudio.nombre, image?.publicId)
+        : undefined;
       return (
         <li class="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
-          {slot && (
+          {slot && image && (
             <div class="bg-surface-muted" style={`aspect-ratio: ${slot.aspect}`}>
               <SlotImage
                 imageSlot={slot}
-                image={images[slot.id]}
+                image={image}
                 sizes="(min-width: 1024px) 420px, (min-width: 640px) 50vw, 100vw"
               />
             </div>

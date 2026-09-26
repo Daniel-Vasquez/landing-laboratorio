@@ -1,5 +1,6 @@
 import { getImagesCollection, isMongoConfigured } from '../mongo.ts';
 import { IMAGE_SLOTS, type ImageSlot } from './slots.ts';
+import { CARD_IMAGE_GROUPS } from './cards.ts';
 import type { ImageDoc } from './types.ts';
 
 export type Editor = { userId: string; name: string; email: string };
@@ -23,9 +24,18 @@ export async function getLandingImages(): Promise<LandingImages> {
     const docs = await collection.find({}).toArray();
     const byId: LandingImages = {};
     for (const doc of docs) {
-      // Se descartan filas de ranuras que ya no existen en el registro: si un
-      // slot se retira del código, su fila deja de renderizarse.
-      if (IMAGE_SLOTS.some((slot) => slot.id === doc._id)) byId[doc._id] = doc;
+      /**
+       * Se aceptan dos formas de clave:
+       *  - ranura FIJA: tiene que seguir en el registro. Si se retira del
+       *    código, su fila deja de renderizarse.
+       *  - ranura de TARJETA (`<path>:<imageKey>`): basta con que su grupo siga
+       *    declarado. Cuál tarjeta la usa lo decide el componente, cruzando con
+       *    el `imageKey` del contenido; una fila huérfana (tarjeta borrada)
+       *    simplemente no la reclama nadie.
+       */
+      const isFixed = IMAGE_SLOTS.some((slot) => slot.id === doc._id);
+      const isCard = CARD_IMAGE_GROUPS.some((group) => doc._id.startsWith(`${group.path}:`));
+      if (isFixed || isCard) byId[doc._id] = doc;
     }
     return byId;
   } catch (error) {
