@@ -1,24 +1,102 @@
 ---
-/**
- * TANDA 4 — placeholder. Su único fin es que exista una ruta protegida contra
- * la que verificar el middleware. La TANDA 5 lo reemplaza por el shell real
- * del dashboard con el índice de secciones.
- */
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import DbErrorBanner from '../../components/admin/DbErrorBanner.astro';
+import DeployStatus from '../../components/admin/DeployStatus.astro';
+import { listSectionsMeta } from '../../lib/content/repository.ts';
+import { formatDateTime, formatRelative } from '../../lib/dates.ts';
+
 export const prerender = false;
 
+// El middleware garantiza que hay sesión antes de llegar aquí; si no, redirige.
 const user = Astro.locals.user!;
+const { ok, error, sections } = await listSectionsMeta();
 ---
-<!doctype html>
-<html lang="es-MX">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="robots" content="noindex,nofollow" />
-    <title>Panel | Hospital Cristal</title>
-  </head>
-  <body>
-    <h1>Panel de administración</h1>
-    <p data-testid="user-name">{user.name}</p>
-    <p data-testid="user-email">{user.email}</p>
-    <form method="post" action="/api/auth/sign-out"><button type="submit">Cerrar sesión</button></form>
-  </body>
-</html>
+<AdminLayout
+  title="Contenido"
+  description="Secciones de la landing page"
+  user={user}
+>
+  {!ok && error && <DbErrorBanner error={error} />}
+  {ok && <DeployStatus />}
+
+  <div class="overflow-hidden rounded-xl border border-border bg-surface">
+    {/* Tabla en pantallas anchas; tarjetas en móvil. Una tabla con scroll
+        horizontal en un teléfono es inutilizable para esta información. */}
+    <table class="hidden w-full text-left text-sm sm:table">
+      <caption class="sr-only">
+        Secciones editables de la landing page, con su última modificación y autor
+      </caption>
+      <thead class="border-b border-border bg-surface-muted/60 text-xs uppercase tracking-wide text-fg-muted">
+        <tr>
+          <th scope="col" class="px-5 py-3 font-semibold">Sección</th>
+          <th scope="col" class="px-5 py-3 font-semibold">Última edición</th>
+          <th scope="col" class="px-5 py-3 font-semibold">Editor</th>
+          <th scope="col" class="px-5 py-3 text-right font-semibold">
+            <span class="sr-only">Acciones</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {sections.map((section) => (
+          <tr class="transition-colors hover:bg-surface-muted/40">
+            <th scope="row" class="px-5 py-4 font-medium text-fg">{section.label}</th>
+            <td class="px-5 py-4 text-fg-muted">
+              {section.updatedAt ? (
+                <>
+                  <span class="block">{formatRelative(section.updatedAt)}</span>
+                  <span class="block text-xs text-fg-muted/70">
+                    {formatDateTime(section.updatedAt)}
+                  </span>
+                </>
+              ) : (
+                <span class="text-fg-muted/70">Sin cambios</span>
+              )}
+            </td>
+            <td class="px-5 py-4 text-fg-muted">
+              {section.updatedBy?.name ?? <span class="text-fg-muted/70">—</span>}
+            </td>
+            <td class="px-5 py-4 text-right">
+              <a
+                href={`/admin/contenido/${section.key}`}
+                class="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-surface-muted"
+              >
+                Editar
+                <span class="sr-only">{section.label}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </a>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <ul class="divide-y divide-border sm:hidden">
+      {sections.map((section) => (
+        <li>
+          <a
+            href={`/admin/contenido/${section.key}`}
+            class="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-surface-muted/40"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block font-medium text-fg">{section.label}</span>
+              <span class="block text-xs text-fg-muted">
+                {section.updatedAt
+                  ? `${formatRelative(section.updatedAt)}${section.updatedBy ? ` · ${section.updatedBy.name}` : ''}`
+                  : 'Sin cambios'}
+              </span>
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 text-fg-muted" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+
+  <p class="mt-4 text-sm text-fg-muted">
+    {sections.length} secciones · El orden de la lista es el orden en que aparecen en la landing.
+  </p>
+</AdminLayout>

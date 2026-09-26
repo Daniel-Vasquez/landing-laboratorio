@@ -138,21 +138,64 @@ export type SectionMeta = {
   updatedBy: Editor | null;
 };
 
-/** Listado para el índice del dashboard, en el orden de SECTION_KEYS. */
-export async function listSectionsMeta(): Promise<SectionMeta[]> {
-  const collection = await getSectionsCollection();
-  const docs = await collection
-    .find({}, { projection: { updatedAt: 1, updatedBy: 1 } })
-    .toArray();
-  const byKey = new Map(docs.map((doc) => [doc._id, doc]));
+/**
+ * Listado para el índice del dashboard.
+ *
+ * A diferencia de la landing, aquí NO se cae al contenido semilla en silencio:
+ * un editor tiene que saber si la base no responde, porque si guarda creyendo
+ * que todo va bien perdería el cambio. Por eso el resultado distingue el fallo
+ * explícitamente, y la página muestra un aviso pero sigue renderizando la lista
+ * de secciones (con metadata vacía) en lugar de devolver un 500.
+ */
+export type SectionsMetaResult = {
+  ok: boolean;
+  error: string | null;
+  sections: SectionMeta[];
+};
 
-  return SECTION_KEYS.map((key) => {
-    const doc = byKey.get(key);
+function emptyMeta(): SectionMeta[] {
+  return SECTION_KEYS.map((key) => ({
+    key,
+    label: SECTION_LABELS[key],
+    updatedAt: null,
+    updatedBy: null,
+  }));
+}
+
+export async function listSectionsMeta(): Promise<SectionsMetaResult> {
+  if (!isMongoConfigured()) {
     return {
-      key,
-      label: SECTION_LABELS[key],
-      updatedAt: doc?.updatedAt ?? null,
-      updatedBy: doc?.updatedBy ?? null,
+      ok: false,
+      error: 'MongoDB no está configurado (falta MONGODB_URI o MONGODB_DB_NAME).',
+      sections: emptyMeta(),
     };
-  });
+  }
+
+  try {
+    const collection = await getSectionsCollection();
+    const docs = await collection
+      .find({}, { projection: { updatedAt: 1, updatedBy: 1 } })
+      .toArray();
+    const byKey = new Map(docs.map((doc) => [doc._id, doc]));
+
+    return {
+      ok: true,
+      error: null,
+      sections: SECTION_KEYS.map((key) => {
+        const doc = byKey.get(key);
+        return {
+          key,
+          label: SECTION_LABELS[key],
+          updatedAt: doc?.updatedAt ?? null,
+          updatedBy: doc?.updatedBy ?? null,
+        };
+      }),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      sections: emptyMeta(),
+    };
+  }
 }

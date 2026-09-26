@@ -1,0 +1,22 @@
+---
+interface Props {
+  error: string;
+}
+const { error } = Astro.props;
+---
+<div
+  role="alert"
+  class="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+>
+  <p class="flex items-start gap-2.5 text-sm font-semibold text-amber-900 dark:text-amber-200">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0" aria-hidden="true">
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01" />
+    </svg>
+    No hay conexión con la base de datos
+  </p>
+  <p class="mt-2 text-sm text-amber-900/90 dark:text-amber-200/90">
+    El panel no puede leer ni guardar contenido ahora mismo. <strong>No intentes
+    editar</strong> hasta que se restablezca: los cambios no se guardarían.
+  </p>
+  <p class="mt-2 font-mono text-xs text-amber-900/70 dark:text-amber-200/70">{error}</p>
+</div>

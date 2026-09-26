@@ -916,6 +916,14 @@ declare namespace App {
 
 ### 5.2 `/admin/index.astro` — índice de secciones
 
+`listSectionsMeta()` devuelve `{ ok, error, sections }`, no solo un array.
+
+> **El dashboard NO cae al contenido semilla en silencio, a diferencia de la landing.** Un editor
+> tiene que saber si la base no responde: si guardara creyendo que todo va bien, perdería el
+> cambio. Con `ok: false` la página muestra `DbErrorBanner` (rol `alert`, causa visible y aviso
+> explícito de no editar) y **sigue renderizando la lista** de las 11 secciones con metadata
+> vacía, en lugar de devolver un 500.
+
 Tabla/grid desde `listSectionsMeta()`:
 
 | Sección | Última edición | Editor | Acción |
@@ -923,9 +931,17 @@ Tabla/grid desde `listSectionsMeta()`:
 | Hero | hace 2 h | Daniel Vásquez | Editar → |
 
 - Orden fijo según `SECTION_KEYS` (el orden visual de la landing).
-- Fechas con `Intl.DateTimeFormat('es-MX', { dateStyle:'medium', timeStyle:'short', timeZone:'America/Mexico_City' })`.
-  **Formatear en el servidor**, no en el cliente, para evitar hydration mismatch.
-- Banner superior: island `DeployStatus.tsx` (se implementa en Tanda 7; en esta Tanda, placeholder estático).
+- Fechas con `Intl.DateTimeFormat('es-MX', { dateStyle:'medium', timeStyle:'short', timeZone:'America/Mexico_City' })`,
+  centralizado en `src/lib/dates.ts`. **Formatear en el servidor**, no en el cliente: evita el
+  hydration mismatch, y la zona se fija explícitamente porque las funciones de Vercel corren en
+  UTC (un cambio guardado a las 23:30 de CDMX se mostraría con la fecha del día siguiente).
+- Banner superior: `DeployStatus.astro`, placeholder estático en esta Tanda; la Tanda 7 lo
+  convierte en island de React con estado real y polling acotado.
+- **Logout en vanilla, no en React:** `POST /api/auth/sign-out` devuelve JSON 200, así que un
+  `<form method="post">` plano navegaría a la respuesta y mostraría el JSON crudo. Hace falta
+  fetch + redirección manual, y para eso no se justifica cargar React.
+- Tabla en pantallas anchas, lista de tarjetas en móvil: una tabla de 4 columnas con scroll
+  horizontal en un teléfono es inutilizable para esta información.
 
 ### 5.3 Criterios de aceptación Tanda 5
 

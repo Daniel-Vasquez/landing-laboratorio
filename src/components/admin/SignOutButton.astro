@@ -1,0 +1,39 @@
+---
+/**
+ * Logout en vanilla JS, no como island de React.
+ *
+ * `POST /api/auth/sign-out` devuelve JSON 200, así que un <form method="post">
+ * plano navegaría a la respuesta y mostraría el JSON crudo en pantalla. Hace
+ * falta fetch + redirección manual — y para eso no se justifica React.
+ */
+---
+<button
+  type="button"
+  data-sign-out
+  class="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-60"
+>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+  </svg>
+  <span class="hidden sm:inline">Cerrar sesión</span>
+</button>
+
+<script>
+  const button = document.querySelector<HTMLButtonElement>('[data-sign-out]');
+
+  button?.addEventListener('click', async () => {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    try {
+      await fetch('/api/auth/sign-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+    } catch {
+      /* Aun si la petición falla, se navega a /login: el middleware volverá a
+         redirigir aquí si la sesión sigue viva. */
+    }
+    window.location.href = '/login';
+  });
+</script>
