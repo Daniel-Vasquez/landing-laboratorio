@@ -6,6 +6,7 @@ import { FIELD_MAP, emptyItem, type Field } from './fieldMap';
 import { deepClone, getPath, setPath } from './paths';
 import RepeaterField from './RepeaterField';
 import CardImageField from './CardImageField';
+import IconPicker, { type IconValue } from './IconPicker';
 import { cardGroupFor, cardSlotKey, newImageKey } from '../../lib/images/cards';
 import { CharCounter, FieldShell, inputClass } from './fields';
 
@@ -311,6 +312,19 @@ export default function SectionEditor({
                 }
               : undefined
           }
+        />
+      );
+    }
+
+    if (field.kind === 'icon') {
+      const value = getPath(data, absolutePath) as IconValue | undefined;
+      return (
+        <IconPicker
+          key={absolutePath}
+          label={field.label}
+          value={value}
+          disabled={saving}
+          onChange={(next) => update(absolutePath, next)}
         />
       );
     }

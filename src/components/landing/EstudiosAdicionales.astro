@@ -2,6 +2,7 @@
 import type { LandingContent } from '../../lib/content/schemas.ts';
 import Section from './Section.astro';
 import Button from '../ui/Button.astro';
+import Icon from './Icon.astro';
 
 interface Props {
   data: LandingContent['estudios_adicionales'];
@@ -14,10 +15,9 @@ const { data } = Astro.props;
   <ul class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     {data.items.map((item) => (
       <li class="flex items-start gap-3 rounded-xl border border-border bg-surface p-5">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-          <path d="M14 2v6h6M9 15h6M9 11h3" />
-        </svg>
+        <span class="mt-0.5 text-primary">
+          <Icon icon={item.icon} fallbackName="clipboard-list" size={20} />
+        </span>
         <div>
           <h3 class="font-semibold">{item.titulo}</h3>
           <p class="mt-1 text-sm text-fg-muted">{item.detalle}</p>

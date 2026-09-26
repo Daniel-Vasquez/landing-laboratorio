@@ -17,6 +17,11 @@ export type Field =
   | { kind: 'text'; path: string; label: string; max?: number; hint?: string }
   | { kind: 'textarea'; path: string; label: string; max?: number; rows?: number; hint?: string }
   | { kind: 'url'; path: string; label: string; hint?: string }
+  /**
+   * Selector de icono + colores. El valor viaja DENTRO de `data`, así que se
+   * guarda con el resto del formulario y no necesita una action propia.
+   */
+  | { kind: 'icon'; path: string; label: string; hint?: string }
   | {
       kind: 'list';
       path: string;
@@ -117,6 +122,7 @@ export const FIELD_MAP: Record<SectionKey, Field[]> = {
       fields: [
         { kind: 'text', path: 'titulo', label: 'Título', max: 80 },
         { kind: 'text', path: 'detalle', label: 'Detalle', max: 200 },
+        { kind: 'icon', path: 'icon', label: 'Icono' },
       ],
     },
     ...CTA_FIELDS,
@@ -135,6 +141,7 @@ export const FIELD_MAP: Record<SectionKey, Field[]> = {
       fields: [
         { kind: 'text', path: 'titulo', label: 'Título', max: 80 },
         { kind: 'textarea', path: 'descripcion', label: 'Descripción', max: 300, rows: 3 },
+        { kind: 'icon', path: 'icon', label: 'Icono' },
       ],
     },
     ...CTA_FIELDS,
@@ -252,7 +259,9 @@ export function emptyItem(fields: Field[]): Record<string, unknown> {
   const item: Record<string, unknown> = {};
   for (const field of fields) {
     if (field.kind === 'list' || field.kind === 'repeater') item[field.path] = [];
-    else item[field.path] = '';
+    // `icon` se deja SIN definir: el esquema lo tiene como opcional y un string
+    // vacío no validaría. El picker lo rellena cuando el editor lo elige.
+    else if (field.kind !== 'icon') item[field.path] = '';
   }
   return item;
 }

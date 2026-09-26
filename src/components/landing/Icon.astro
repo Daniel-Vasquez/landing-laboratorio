@@ -1,0 +1,55 @@
+---
+import { ICON_COMPONENTS } from '../../lib/icons/catalog.ts';
+import { FALLBACK_ICON, isIconName } from '../../lib/icons/names.ts';
+import type { IconConfig } from '../../lib/content/schemas.ts';
+
+interface Props {
+  icon: IconConfig | undefined;
+  /** Icono a usar si el dato no trae ninguno. */
+  fallbackName?: string;
+  size?: number;
+  /** Clases del contenedor, para ajustar el tamaño de la pastilla. */
+  class?: string;
+}
+
+const { icon, fallbackName, size = 20, class: extra = '' } = Astro.props;
+
+/**
+ * Degradar, nunca romper: un nombre ausente o fuera del catálogo cae al icono
+ * de respaldo. La landing no debe renderizar un hueco por un dato corrupto.
+ */
+const name = isIconName(icon?.name)
+  ? icon.name
+  : isIconName(fallbackName)
+    ? fallbackName
+    : FALLBACK_ICON;
+
+const LucideIcon = ICON_COMPONENTS[name];
+
+// `currentColor` hereda el color del contenedor: es el comportamiento previo
+// al selector, y lo que se usa mientras una tarjeta no tenga icono configurado.
+const color = icon?.color ?? 'currentColor';
+const background = icon?.background ?? null;
+---
+{
+  background ? (
+    /*
+     * `aria-hidden` en el contenedor oculta todo el subárbol.
+     *
+     * Estos iconos acompañan a un título de texto que ya comunica el
+     * significado: exponerlos duplicaría el contenido para un lector de
+     * pantalla. `npm run a11y:html` falla si un SVG queda sin ocultar.
+     */
+    <span
+      class:list={['grid size-11 shrink-0 place-items-center rounded-lg', extra]}
+      style={`background-color: ${background}`}
+      aria-hidden="true"
+    >
+      <LucideIcon size={size} color={color} />
+    </span>
+  ) : (
+    <span class:list={['inline-grid shrink-0 place-items-center', extra]} aria-hidden="true">
+      <LucideIcon size={size} color={color} />
+    </span>
+  )
+}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ICON_NAMES } from '../icons/names.ts';
 
 /**
  * Los esquemas Zod son la ÚNICA fuente de verdad de la forma del contenido.
@@ -9,6 +10,24 @@ import { z } from 'zod';
  * Los límites de longitud son deliberados: protegen el diseño de textos que
  * rompan la maqueta y, en SEO, los límites reales del SERP.
  */
+
+/** Color hexadecimal de 6 dígitos en minúsculas. */
+const hexColor = z
+  .string()
+  .regex(/^#[0-9a-f]{6}$/, { message: 'Usa un color hexadecimal de 6 dígitos, como #0f766e.' });
+
+export const iconSchema = z.object({
+  name: z.enum(ICON_NAMES as [string, ...string[]]),
+  /** Color del trazo del icono. */
+  color: hexColor,
+  /**
+   * Color de fondo de la pastilla. `null` = sin fondo (icono suelto).
+   * Se guarda explícitamente para distinguir "sin fondo" de "no configurado".
+   */
+  background: hexColor.nullable(),
+});
+
+export type IconConfig = z.infer<typeof iconSchema>;
 
 const cta = z.object({
   label: z.string().min(1).max(60),
@@ -64,6 +83,14 @@ export const estudiosAdicionalesSchema = z.object({
       z.object({
         titulo: z.string().min(3).max(80),
         detalle: z.string().min(1).max(200),
+        /**
+         * `.optional()` es OBLIGATORIO en esta primera versión: los documentos ya
+         * guardados no tienen `icon`. Si fuera requerido, la sección dejaría de
+         * validar y `repository.ts` la sustituiría por el contenido semilla — el
+         * cliente vería revertirse su contenido real. Se puede endurecer después
+         * de correr `npm run db:migrate-icons`.
+         */
+        icon: iconSchema.optional(),
       }),
     )
     .min(1)
@@ -78,6 +105,8 @@ export const porQueHospitalSchema = z.object({
       z.object({
         titulo: z.string().min(3).max(80),
         descripcion: z.string().min(10).max(300),
+        /** Opcional hasta migrar; ver la nota en `estudios_adicionales`. */
+        icon: iconSchema.optional(),
       }),
     )
     .min(1)
