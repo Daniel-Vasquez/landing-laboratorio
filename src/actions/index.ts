@@ -9,6 +9,7 @@ import {
   type SectionKey,
 } from '../lib/content/schemas.ts';
 import { setSection } from '../lib/content/repository.ts';
+import { getDeployState, triggerDeploy } from '../lib/deploy.ts';
 
 /**
  * Server actions del dashboard.
@@ -73,10 +74,54 @@ export const server = {
           });
         }
 
-        // TANDA 7 añadirá aquí el disparo del Deploy Hook de Vercel.
-        // El guardado NO debe fallar si el webhook falla: el contenido ya está
-        // en MongoDB y el redespliegue es reintentable.
-        return { ok: true as const, savedAt: new Date().toISOString() };
+        // El contenido ya está a salvo en MongoDB. `triggerDeploy` captura sus
+        // propios errores y los devuelve en el resultado en lugar de lanzar:
+        // un webhook caído NO debe convertir un guardado exitoso en un error.
+        // El redespliegue es reintentable desde el botón "Publicar ahora".
+        const deploy = await triggerDeploy({
+          reason: `content:${key}`,
+          actor: { name: user.name },
+        });
+
+        return { ok: true as const, savedAt: new Date().toISOString(), deploy };
+      },
+    }),
+  },
+
+  deploy: {
+    /** Estado para el indicador del dashboard. Solo lectura. */
+    state: defineAction({
+      handler: async (_input, context) => {
+        requireUser(context.locals);
+        return getDeployState();
+      },
+    }),
+
+    /**
+     * Disparo manual. `force: true` salta la ventana de enfriamiento: lo pide
+     * una persona explícitamente, así que la protección contra ráfagas
+     * automáticas no aplica.
+     */
+    trigger: defineAction({
+      handler: async (_input, context) => {
+        const user = requireUser(context.locals);
+        return triggerDeploy({ reason: 'manual', actor: { name: user.name }, force: true });
+      },
+    }),
+
+    /**
+     * Drena un cambio pendiente si ya pasó el enfriamiento. SIN `force`: si
+     * todavía no toca, no dispara. Lo llama el indicador del dashboard cuando
+     * detecta `pending`, y el cron opcional.
+     */
+    drain: defineAction({
+      handler: async (_input, context) => {
+        const user = requireUser(context.locals);
+        const state = await getDeployState();
+        if (!state.pending) {
+          return { ok: true as const, triggered: false as const, reason: 'nothing-pending' as const };
+        }
+        return triggerDeploy({ reason: 'drain-pending', actor: { name: user.name } });
       },
     }),
   },

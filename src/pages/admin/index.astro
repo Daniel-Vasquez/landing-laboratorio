@@ -1,15 +1,20 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import DbErrorBanner from '../../components/admin/DbErrorBanner.astro';
-import DeployStatus from '../../components/admin/DeployStatus.astro';
+import DeployStatus from '../../components/admin/DeployStatus.tsx';
 import { listSectionsMeta } from '../../lib/content/repository.ts';
 import { formatDateTime, formatRelative } from '../../lib/dates.ts';
+import { getDeployState } from '../../lib/deploy.ts';
 
 export const prerender = false;
 
 // El middleware garantiza que hay sesión antes de llegar aquí; si no, redirige.
 const user = Astro.locals.user!;
 const { ok, error, sections } = await listSectionsMeta();
+
+// Estado inicial en el servidor: el indicador se pinta correcto en el primer
+// render, sin un salto visual mientras el cliente hace su primera consulta.
+const deployState = await getDeployState();
 ---
 <AdminLayout
   title="Contenido"
@@ -17,7 +22,7 @@ const { ok, error, sections } = await listSectionsMeta();
   user={user}
 >
   {!ok && error && <DbErrorBanner error={error} />}
-  {ok && <DeployStatus />}
+  {ok && <DeployStatus client:load initial={deployState} />}
 
   <div class="overflow-hidden rounded-xl border border-border bg-surface">
     {/* Tabla en pantallas anchas; tarjetas en móvil. Una tabla con scroll

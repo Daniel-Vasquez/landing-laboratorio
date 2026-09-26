@@ -1157,7 +1157,13 @@ Implementación de `triggerDeploy`:
    operación atómica de MongoDB**. Un `find` seguido de un `update` sería una race condition.
 3. `POST` al hook con `AbortSignal.timeout(8000)`, body JSON `{ reason, actor: actor.name }`.
    (El body es opcional para Vercel; sirve de rastro en el log del hook.)
-4. Persistir `lastStatus`, `lastError`, `lastResponse.job.id` si viene.
+4. Persistir `lastStatus` y `lastError`. **Al tener éxito NO se vuelve a tocar `pending`.**
+
+   > **Segunda race condition, encontrada por la prueba de ráfaga:** el claim ya dejó
+   > `pending: false`. Entre el claim y la respuesta del hook, un guardado concurrente puede
+   > haberlo puesto en `true`. Volver a ponerlo en `false` en la ruta de éxito borra esa marca —
+   > y el build arranca al llamar al hook, así que los guardados que aún no habían llegado a
+   > MongoDB **no entran en esa compilación** y se quedarían sin publicar para siempre.
 5. **Nunca propagar la excepción.** `try/catch` → `{ ok:false, error: String(e) }`.
 
 Constantes:
@@ -1193,15 +1199,22 @@ cambio no se publica. Dos opciones:
 
 - **A (simple):** el `DeployStatus` muestra el pendiente y el siguiente save/click lo drena.
   Riesgo real de contenido no publicado.
-- **B (robusta, recomendada):** `src/pages/api/cron/drain-deploy.ts` (`prerender = false`),
+- **B (implementada, doble vía):**
+  1. `DeployStatus.tsx` detecta `pending` con el enfriamiento ya vencido y llama
+     `deploy.drain` por sí solo: con el dashboard abierto, se publica sin intervención.
+     Se prefirió esto a que `getDeployState()` dispare por sí mismo — una función llamada
+     "get" no debe tener efectos secundarios.
+  2. `src/pages/api/cron/drain-deploy.ts` (`prerender = false`),
   protegido por header `Authorization: Bearer ${CRON_SECRET}`, que si `pending===true` y pasó
   el cooldown, dispara. Registrado en `vercel.json`:
   ```json
   { "crons": [{ "path": "/api/cron/drain-deploy", "schedule": "*/10 * * * *" }] }
   ```
   Vercel envía el header `Authorization: Bearer <CRON_SECRET>` automáticamente si la var existe.
-  Plan Hobby permite crons con granularidad diaria; `*/10` requiere plan Pro — verificar el plan
-  antes de elegir B.
+  **NO está registrado en `vercel.json` a propósito:** `*/10` requiere plan Pro, y un cron diario
+  (lo máximo en Hobby) dejaría un cambio sin publicar hasta 24 h, que es peor que no tenerlo.
+  Sin `CRON_SECRET` el endpoint responde 503: abierto permitiría a cualquiera agotar la cuota
+  de builds.
 
 ### 7.6 Criterios de aceptación Tanda 7
 
@@ -1436,6 +1449,8 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 21 | `z` de `astro:schema` | Deprecado; se elimina en Astro 8 | Migrado a `astro/zod`. |
 | 22 | Better Auth exige header `Origin` en POST (CSRF) | Un cliente que no lo envíe recibe 403 | Los navegadores lo envían siempre en POST. Afecta solo a pruebas con curl. |
 | 23 | Editor mostrando semilla con la base caída | El editor guardaría sobre datos que no vio | La página comprueba la conexión aparte de `getSection` y avisa con `DbErrorBanner`. |
+| 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
+| 26 | `pending: false` en la ruta de éxito del webhook | Los guardados concurrentes posteriores al claim se quedan sin publicar | La ruta de éxito no toca `pending`; el claim ya lo gestionó. |
 | 24 | **Comillas arrastradas al pegar env vars en Vercel** (`"https://..."`) | Build abortado con `Invalid URL`, sin decir qué variable ni qué valor. En `BETTER_AUTH_URL` es peor: rompe las cookies en silencio | `normalizeUrlEnv` en `src/lib/env.ts` + copia en `astro.config.mjs`: quita comillas, añade protocolo, quita slash final, avisa en el log, y si sigue siendo inválido falla nombrando la variable y el valor. `.env.example` ya no usa comillas. |
 
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
