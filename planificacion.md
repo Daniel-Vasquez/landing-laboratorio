@@ -1552,43 +1552,120 @@ La API de subida rechaza cualquier `slotId` que no esté en el registro. Consecu
 
 ```ts
 export type ImageSlot = {
-  /** Id estable. Es también el `public_id` en Cloudinary (sin la carpeta). */
+  /** Id estable usado en código, en el panel y como `_id` en `landing_images`. */
   id: string;
-  /** Sección de la landing a la que pertenece. */
+  /**
+   * `public_id` REAL en Cloudinary. Se declara explícitamente en lugar de
+   * derivarlo de `id` porque los assets ya existen con nombres en español y con
+   * acentos. Derivarlo haría que el primer reemplazo subiera a un `public_id`
+   * distinto del actual y dejara el original huérfano.
+   */
+  publicId: string;
   section: SectionKey;
-  /** Etiqueta para el panel: debe nombrar la tarjeta concreta. */
+  /** Etiqueta del panel: nombra la tarjeta o el bloque concreto. */
   label: string;
-  /** Proporción con la que se renderiza. Fija el alto reservado (CLS = 0). */
-  aspect: '1/1' | '4/3' | '4/5' | '16/9';
-  /** Ancho máximo al que se muestra, para generar el srcset. */
+  /** Cómo se integra en el layout. Determina el componente que la renderiza. */
+  placement: 'aside-right' | 'card-top' | 'section-background';
+  aspect: '4/3' | '16/9';
+  /** Ancho máximo al que se muestra, base del srcset. */
   displayWidth: number;
 };
-
-export const IMAGE_SLOTS: ImageSlot[] = [ /* ... */ ];
-export const SLOT_IDS = IMAGE_SLOTS.map((s) => s.id);
-export function isSlotId(v: unknown): v is string { /* ... */ }
 ```
 
-Propuesta inicial de slots, derivada del layout actual — **requiere confirmación del cliente**,
-porque define qué tendrá imagen y qué no:
+**Las 10 ranuras, con los `public_id` verificados contra la cuenta** (`asset_folder =
+"landing-laboratorio"`, cloud `jlpjcazy`):
 
-| `slotId` | Sección | Tarjeta / uso | Proporción |
-|---|---|---|---|
-| `hero-principal` | `hero` | Imagen principal del hero | `16/9` |
-| `estudio-biometria-hematica` | `estudios_principales` | Biometría hemática | `4/3` |
-| `estudio-quimica-sanguinea` | `estudios_principales` | Química sanguínea | `4/3` |
-| `estudio-examen-orina` | `estudios_principales` | Examen general de orina | `4/3` |
-| `estudio-hemoglobina-glucosilada` | `estudios_principales` | Hemoglobina glucosilada | `4/3` |
-| `estudio-perfil-lipidos` | `estudios_principales` | Perfil de lípidos | `4/3` |
-| `estudio-perfil-tiroideo` | `estudios_principales` | Perfil tiroideo | `4/3` |
-| `video-1` … `video-7` | `videos` | Miniaturas de los 7 posts de Instagram | `4/5` |
+| `id` | `publicId` en Cloudinary | Sección | Ubicación | Origen |
+|---|---|---|---|---|
+| `hero` | `hero` | `hero` | Lado derecho | 1200×896 webp |
+| `estudio-biometria-hematica` | `Biometría_Hemática` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `estudio-quimica-sanguinea` | `Química_Sanguínea` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `estudio-examen-orina` | `Examen_General_de_Orina` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `estudio-hemoglobina-glucosilada` | `Hemoglobina_Glucosilada` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `estudio-perfil-lipidos` | `Perfil_de_Lípidos` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `estudio-perfil-tiroideo` | `Perfil_Tiroideo` | `estudios_principales` | Tarjeta | 1376×768 webp |
+| `deteccion-oportuna` | `Detección_Oportuna` | `por_que_estudios` | Lado derecho | 1376×768 webp |
+| `cta-final` | `Tu_salud_no_puede_esperar` | `cta_final` | Lado derecho | **PENDIENTE de subir** |
+| `faq-fondo` | `Preguntas_Frecuentes` | `faq` | Fondo de sección | 1376×768 webp |
 
-Total: **14 ranuras**. Los 7 `video-*` sustituyen al campo `thumbnail` que hoy vive dentro de
-`videos.items[]` (ver 11.6, migración).
+> **`cta-final` no tiene asset todavía.** Verificado con la Admin API: la carpeta contiene 9
+> imágenes y falta la de «Tu salud no puede esperar». La sección renderiza su placeholder hasta
+> que se suba, así que no bloquea nada — pero la ubicación queda vacía.
 
-> **`hero-principal` es el LCP de la página.** Debe renderizarse con `loading="eager"` y
-> `fetchpriority="high"`; todas las demás con `loading="lazy"`. Es la única imagen que puede
-> mover la métrica de Core Web Vitals.
+> **Las miniaturas de Instagram (`video-1`…`video-7`) salen del registro.** No están en la
+> carpeta y no se mencionan en la especificación de ubicaciones. `Videos.astro` conserva su
+> placeholder actual. Si más adelante se quieren gestionar por Cloudinary, se añaden 7 slots.
+
+#### 11.1.1 Cuenta con carpetas dinámicas: el `public_id` NO lleva el prefijo
+
+Verificado contra la cuenta: los assets tienen `asset_folder = "landing-laboratorio"` pero su
+`public_id` es `hero`, **no** `landing-laboratorio/hero`. Es el modo de *dynamic folders* de
+Cloudinary, donde la carpeta es metadato y no parte del identificador.
+
+Consecuencias para la implementación:
+
+- **Al subir hay que pasar `asset_folder: CLOUDINARY_FOLDER` explícitamente.** Sin él, el
+  reemplazo aterrizaría en la raíz de la cuenta y el asset de la carpeta quedaría intacto.
+- El `public_id` del reemplazo es el de la tabla, **sin prefijo**.
+- Los `public_id` llevan acentos y mayúsculas. Hay que normalizarlos a **NFC** antes de compararlos
+  o enviarlos: la misma cadena en NFD (como la produce macOS al copiar de Finder) es un
+  identificador distinto para Cloudinary y crearía un asset duplicado.
+- En la URL de entrega van percent-encoded. La función de construcción de URL debe aplicar
+  `encodeURIComponent` a cada segmento del `public_id`.
+
+#### 11.1.2 Especificación de layout por ubicación
+
+**`aside-right` — Hero, Detección oportuna, Tu salud no puede esperar**
+
+Rejilla de dos columnas en escritorio, apiladas en móvil con el texto primero:
+
+```
+lg:  [ texto 55% ] [ imagen 45% ]        base: [ texto ] sobre [ imagen ]
+```
+
+- `grid lg:grid-cols-[1.15fr_1fr] lg:items-center gap-10`
+- La imagen va en un contenedor con `aspect-ratio` fijo, `rounded-2xl overflow-hidden` y
+  `object-cover`.
+- **El hero es el LCP.** Su imagen es la única con `loading="eager"` y `fetchpriority="high"`;
+  todas las demás van `lazy`.
+- En móvil la imagen va **después** del CTA, no entre el texto y el botón: interponerla empujaría
+  la conversión por debajo del pliegue.
+
+**`card-top` — los 6 estudios**
+
+La imagen encabeza la tarjeta, a sangre con sus bordes:
+
+- Contenedor `aspect-[16/9] overflow-hidden` como primer hijo de la tarjeta; la tarjeta ya tiene
+  `overflow-hidden` y `rounded-xl`, así que la imagen hereda el radio superior.
+- `object-cover` y `width`/`height` explícitos: sin ellos, seis imágenes cargando en diferido
+  provocan seis saltos de layout.
+- Si un estudio **no** tiene slot (porque el administrador añadió una tarjeta nueva desde el
+  panel, ver 11.0), la tarjeta se renderiza **sin** el bloque de imagen, no con un hueco vacío.
+  El emparejamiento es por `id` de slot, no por posición en el array.
+
+**`section-background` — Preguntas frecuentes**
+
+La imagen va detrás de toda la sección, y aquí hay un riesgo de accesibilidad que debe resolverse
+en el diseño, no descubrirse en producción:
+
+> **Texto sobre fotografía destruye el contraste.** La Tanda 9 dejó las 14 combinaciones de color
+> en AA medido, y una imagen de fondo lo invalida: el ratio pasa a depender de cada píxel. La FAQ
+> lleva texto de cuerpo, que exige 4.5:1.
+>
+> Mitigación obligatoria, en este orden:
+> 1. La imagen se sitúa con `position: absolute; inset: 0; object-fit: cover` y
+>    `aria-hidden="true"` — es decorativa, no informativa.
+> 2. **Scrim opaco por encima**, no una opacidad sobre la imagen:
+>    `bg-[var(--color-surface-muted)]/92` en light y `/94` en dark. Con 92 % de opacidad el color
+>    del token domina y los ratios medidos se conservan dentro del margen.
+> 3. Las tarjetas del acordeón mantienen su `bg-surface` **opaco**. El fondo se percibe en los
+>    márgenes de la sección, no debajo del texto.
+> 4. Verificar con `npm run a11y:contrast` que no cambia nada, y comprobar a ojo en ambos temas.
+>
+> Si el resultado se ve demasiado velado para el gusto del cliente, la salida correcta **no** es
+> bajar el scrim: es pedir una imagen de menor contraste o aplicarle un desenfoque de entrega
+> (`e_blur:400` en la transformación de Cloudinary), que reduce el detalle sin tocar la
+> legibilidad del texto.
 
 ### 11.2 Modelo de datos
 
@@ -1634,12 +1711,13 @@ El proyecto usa cuatro variables, **ya configuradas en Vercel** por el cliente:
 | `CLOUDINARY_API_SECRET` | Firmar la subida | **No, nunca** |
 | `CLOUDINARY_FOLDER` | Carpeta de destino: `landing-laboratorio` | No |
 
-> **PENDIENTE (verificado en la Tanda 11): las cuatro variables NO están en el `.env` local ni
-> en `.env.example`.** Al implementar hay que:
+> **Verificado: las cuatro están en el `.env` local** (cloud `jlpjcazy`, carpeta
+> `landing-laboratorio`). Pendiente al implementar:
 > 1. añadirlas a `.env.example` sin comillas, como el resto;
-> 2. añadirlas al bloque de variables por entorno de la sección 10.1;
-> 3. añadir su comprobación a `scripts/preflight.mjs` (obligatorias, y que `CLOUDINARY_FOLDER`
->    valga `landing-laboratorio`).
+> 2. añadir su comprobación a `scripts/preflight.mjs` (obligatorias, y que `CLOUDINARY_FOLDER`
+>    valga `landing-laboratorio`);
+> 3. confirmar que están cargadas también en Vercel — el **build** las necesita para construir
+>    las URLs de entrega, no solo el runtime del panel.
 >
 > Ninguna lleva prefijo `PUBLIC_`. `CLOUDINARY_API_SECRET` en el bundle del navegador permitiría
 > a cualquiera subir, transformar y **borrar** los assets de la cuenta.
@@ -1672,6 +1750,11 @@ Admin elige archivo
       ▼
 [5] `triggerDeploy()` → mismo debounce y mismos 4 mensajes de la Tanda 7
 ```
+
+> **CORREGIDO (ver 11.1.1): el `public_id` no lleva el prefijo de la carpeta.** La cuenta usa
+> carpetas dinámicas, así que la carpeta va en `asset_folder` y el `public_id` es el nombre
+> desnudo (`hero`, no `landing-laboratorio/hero`). Omitir `asset_folder` subiría el reemplazo a la
+> raíz de la cuenta y dejaría intacto el asset de la carpeta.
 
 **`public_id` determinista con `overwrite: true` es la decisión central del reemplazo.** Efectos:
 
@@ -1760,7 +1843,12 @@ campo del esquema y de los 7 items; no hay dato que preservar.
 - [ ] `npm run preflight` falla si falta alguna de las 4 variables de Cloudinary.
 - [ ] Subir un PNG a `estudio-biometria-hematica` actualiza `landing_images`, deja
       `updatedBy` con el usuario correcto y dispara el Deploy Hook.
-- [ ] El `publicId` del documento es exactamente `landing-laboratorio/<slotId>`.
+- [ ] El hero renderiza la imagen a la derecha en escritorio y **debajo del CTA** en móvil.
+- [ ] Las 6 tarjetas de estudios llevan su imagen correspondiente, emparejada por slot y no por
+      posición en el array.
+- [ ] La sección de FAQ con imagen de fondo sigue pasando `npm run a11y:contrast`, y el texto del
+      acordeón se lee sin esfuerzo en ambos temas.
+- [ ] El `publicId` del documento es exactamente el de la tabla 11.1 (sin prefijo de carpeta) y el asset sigue en `asset_folder = landing-laboratorio`, no en la raíz.
 - [ ] Reemplazar la misma ranura **dos veces** deja **un solo** asset en Cloudinary
       (verificar en el panel de Media Library) y el `version` cambia.
 - [ ] Tras el rebuild, la landing sirve la imagen nueva y el `<img>` lleva `width`, `height` y
@@ -1812,6 +1900,9 @@ impide por construcción.
 | 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
 | 28 | **Paleta entregada sin contraste AA en tema Light** | CTA principal a 3.74:1 y links a 3.49:1: ilegibles para baja visión en un sitio de salud | Bajado un paso cada familia (`#0f766e`, `#0369a1`). Auditoría automatizada en `npm run a11y:contrast`. |
 | 29 | Borde de controles a 1.16:1 | Los inputs son casi invisibles (WCAG 1.4.11 pide 3:1) | `--c-border-strong` para inputs y botones con borde. |
+| 38 | `public_id` con prefijo de carpeta en una cuenta con carpetas dinámicas | El reemplazo sube a la raíz y el asset de la carpeta queda intacto: el cambio no se ve | `public_id` desnudo del registro + `asset_folder` explícito. Verificado contra la cuenta. |
+| 39 | `public_id` con acentos comparado en NFD | macOS produce NFD al copiar nombres; para Cloudinary es otro identificador y crearía un duplicado | Normalizar a NFC antes de comparar o enviar; `encodeURIComponent` por segmento en la URL. |
+| 40 | Texto sobre la imagen de fondo de la FAQ | Invalida las 14 combinaciones AA medidas en la Tanda 9: el contraste pasa a depender de cada píxel | Scrim opaco al 92 % sobre la imagen + tarjetas con fondo opaco. Si se ve velado, desenfocar la imagen, no bajar el scrim. |
 | 33 | Imágenes dentro de los repeaters de la Tanda 6 | Añadir un item crearía una ranura y alteraría el layout — lo que el requisito prohíbe | Las ranuras se declaran en **código** (`slots.ts`), no en datos. Colección `landing_images` aparte, indexada por `slotId`. |
 | 34 | Validar el tipo de archivo por extensión o `Content-Type` | Ambos los controla el cliente: un `.svg` con `<script>` renombrado a `.png` pasaría | Validación por **firmas mágicas** de los bytes en el servidor. SVG excluido. |
 | 35 | `public_id` aleatorio por subida | Se acumulan assets huérfanos en Cloudinary y haría falta un endpoint de borrado | `public_id` determinista por slot + `overwrite: true` + `invalidate: true`. Un asset por ranura, para siempre. |
