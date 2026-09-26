@@ -16,6 +16,20 @@ interface Props {
 const { title, user, description } = Astro.props;
 const { pathname } = Astro.url;
 
+/**
+ * Enlace a la landing pública.
+ *
+ * Se toma de `PUBLIC_SITE_URL` en lugar de escribir el dominio a mano: ya es el
+ * valor canónico de "dónde vive este sitio" (lo usan el canonical, OpenGraph y
+ * el sitemap), así que no puede quedar desincronizado. En local apunta a la
+ * landing local, que es lo útil mientras se desarrolla; en producción, al
+ * dominio real.
+ *
+ * Para abrir SIEMPRE la landing de producción aunque se trabaje en local,
+ * sustituir por la URL literal.
+ */
+const landingUrl = Astro.site?.href ?? '/';
+
 const navItems = [
   {
     href: '/admin',
@@ -122,6 +136,29 @@ function initials(name: string): string {
             {description && <p class="truncate text-sm text-fg-muted">{description}</p>}
           </div>
           <slot name="actions" />
+
+          <!--
+            Enlace a la landing, disponible en todas las pantallas del panel
+            porque vive en el layout. Se abre en otra pestaña para no perder lo
+            que el editor esté escribiendo: `SectionEditor` avisa al salir con
+            cambios sin guardar, y navegar en la misma pestaña dispararía ese
+            aviso cada vez.
+          -->
+          <a
+            href={landingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0" aria-hidden="true">
+              <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            </svg>
+            <span class="hidden sm:inline">Ir a la Landing</span>
+            <span class="sr-only sm:hidden">Ir a la Landing</span>
+            <!-- Los lectores de pantalla deben saber que sale de la pestaña. -->
+            <span class="sr-only">(se abre en una pestaña nueva)</span>
+          </a>
+
           <ThemeToggle />
           <SignOutButton />
         </header>
