@@ -968,7 +968,7 @@ duplicación, manejo de errores estructurado (`isInputError`), y llamada desde R
 
 ```ts
 import { defineAction, ActionError } from 'astro:actions';
-import { z } from 'astro:schema';
+import { z } from 'astro/zod';  // `astro:schema` está deprecado (se elimina en Astro 8)
 import { SECTION_SCHEMAS, SECTION_KEYS } from '../lib/content/schemas';
 import { setSection } from '../lib/content/repository';
 import { triggerDeploy, getDeployState } from '../lib/deploy';
@@ -1056,8 +1056,12 @@ type Field =
 export const FIELD_MAP: Record<SectionKey, Field[]> = { /* 11 entradas */ };
 ```
 
+Rutas punteadas (`cta.label`, `estudios.0.nombre`) con `getPath`/`setPath` inmutables en
+`paths.ts`: evita escribir un reducer a medida para cada una de las 11 secciones.
+
 Componentes:
-- `RepeaterField.tsx`: agregar / eliminar / mover ↑↓ items. Botones con `aria-label` explícito.
+- `RepeaterField.tsx`: agregar / eliminar / mover ↑↓ items. Botones con `aria-label` explícito
+  que incluye el título del item — "↑" no dice nada a un lector de pantalla.
 - Contador de caracteres visible cuando hay `max` (ej. `seo.description` 50–160).
 - Botón **Guardar** deshabilitado si `!isDirty`. `beforeunload` si hay cambios sin guardar.
 - Al guardar: `actions.content.updateSection({ key, data })`.
@@ -1073,6 +1077,8 @@ Componentes:
 - [ ] Enviar `seo.description` de 20 chars → error de validación en el campo, **nada se escribe en Mongo**.
 - [ ] Agregar un 7.º estudio en el repeater, guardar, rebuild → aparece en la landing.
 - [ ] `curl -X POST /_actions/content.updateSection` sin cookie → 401 (no 500, no 200).
+- [ ] Clave de sección inexistente → 400 (`AstroActionInputError`, atrapado por el `z.enum`).
+- [ ] `seo.title` de 95 caracteres → 400 con el mensaje del campo; la base NO se modifica.
 - [ ] Borrar la cookie en DevTools y guardar → redirige a login sin perder pantalla en blanco.
 
 ---
@@ -1420,6 +1426,9 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 18 | `getSession` lanzando por fallo de base | 500 en `/admin` en vez de redirigir | `try/catch` -> se trata como sin sesión (fail closed). |
 | 19 | Open redirect vía `?redirect=` | Phishing: el usuario acaba en otro dominio tras autenticarse | `safeRedirect()` valida que sea ruta interna. 7 casos cubiertos. |
 | 20 | Node local 26 vs Node 24 en Vercel | Una API solo de Node 26 rompería en producción | Hoy no se usa ninguna (`process.loadEnvFile` existe desde 20.12). Para fijarlo: `engines.node: "24.x"` en package.json. |
+| 21 | `z` de `astro:schema` | Deprecado; se elimina en Astro 8 | Migrado a `astro/zod`. |
+| 22 | Better Auth exige header `Origin` en POST (CSRF) | Un cliente que no lo envíe recibe 403 | Los navegadores lo envían siempre en POST. Afecta solo a pruebas con curl. |
+| 23 | Editor mostrando semilla con la base caída | El editor guardaría sobre datos que no vio | La página comprueba la conexión aparte de `getSection` y avisa con `DbErrorBanner`. |
 
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
 

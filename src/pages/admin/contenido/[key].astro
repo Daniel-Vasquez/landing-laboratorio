@@ -1,0 +1,41 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import DbErrorBanner from '../../../components/admin/DbErrorBanner.astro';
+import SectionEditor from '../../../components/admin/SectionEditor.tsx';
+import { getSection } from '../../../lib/content/repository.ts';
+import { isMongoConfigured } from '../../../lib/mongo.ts';
+import { SECTION_LABELS, isSectionKey } from '../../../lib/content/schemas.ts';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+const { key } = Astro.params;
+
+// Clave desconocida -> volver al índice. No se lanza un 500 por un URL mal escrito.
+if (!isSectionKey(key)) {
+  return Astro.redirect('/admin', 302);
+}
+
+// `getSection` cae al contenido semilla si la base falla, así que el editor
+// podría mostrar datos que NO están en MongoDB. Se comprueba la conexión
+// aparte para poder advertirlo: guardar sobre una base caída fallaría.
+let dbReachable = isMongoConfigured();
+if (dbReachable) {
+  try {
+    const { getSectionsCollection } = await import('../../../lib/mongo.ts');
+    await (await getSectionsCollection()).findOne({ _id: key }, { projection: { _id: 1 } });
+  } catch {
+    dbReachable = false;
+  }
+}
+
+const data = await getSection(key);
+const label = SECTION_LABELS[key];
+---
+<AdminLayout title={label} description="Editar contenido de la sección" user={user}>
+  {!dbReachable && (
+    <DbErrorBanner error="No se pudo confirmar la conexión con MongoDB. Lo que ves puede ser contenido semilla y el guardado fallará." />
+  )}
+
+  <SectionEditor client:load sectionKey={key} initialData={data} />
+</AdminLayout>
