@@ -11,6 +11,14 @@ interface Props {
    * de eliminar una tarjeta cuya imagen se perdería.
    */
   imageKeysWithImage?: ReadonlySet<string>;
+  /**
+   * Render del campo de imagen DENTRO de cada tarjeta. Se recibe como render
+   * prop para que el repeater no sepa nada de Cloudinary ni del estado de
+   * archivos: solo decide dónde va.
+   */
+  renderCardImage?: (item: unknown, index: number) => React.ReactNode;
+  /** Permite decorar el item nuevo (p. ej. asignarle un `imageKey`). */
+  makeItem?: () => Record<string, unknown>;
 }
 
 export default function RepeaterField({
@@ -19,6 +27,8 @@ export default function RepeaterField({
   onChange,
   renderItemField,
   imageKeysWithImage,
+  renderCardImage,
+  makeItem,
 }: Props) {
   const atMax = items.length >= field.max;
 
@@ -59,7 +69,9 @@ export default function RepeaterField({
 
   function add() {
     if (atMax) return;
-    onChange([...items, emptyItem(field.fields)]);
+    // `makeItem` inyecta el `imageKey` en los grupos con imagen, para que la
+    // tarjeta nueva muestre su campo de imagen desde el primer momento.
+    onChange([...items, makeItem ? makeItem() : emptyItem(field.fields)]);
   }
 
   function itemTitle(item: unknown, index: number): string {
@@ -139,6 +151,9 @@ export default function RepeaterField({
               {field.fields.map((sub) =>
                 renderItemField(sub, `${field.path}.${index}.${sub.path}`),
               )}
+              {/* Texto e imagen en la MISMA tarjeta: el editor no tiene que
+                  guardar primero y subir la foto después. */}
+              {renderCardImage?.(item, index)}
             </div>
           </li>
         ))}

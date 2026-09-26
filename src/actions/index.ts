@@ -53,7 +53,17 @@ async function ensureImageKeys(key: SectionKey, data: unknown): Promise<unknown>
   const items = record[group.path];
   if (!Array.isArray(items)) return data;
 
-  // Claves legítimas: las que ya están guardadas en la base.
+  /**
+   * Claves legítimas, de dos procedencias:
+   *
+   *  1. las que ya están guardadas en el documento (edición normal);
+   *  2. las que tienen una fila en `landing_images`, es decir: una imagen que
+   *     se acaba de subir para una tarjeta que aún no se ha guardado.
+   *
+   * Sin la segunda, el formulario unificado perdería la imagen de cada tarjeta
+   * nueva: al guardar, el servidor descartaría su clave por desconocida y
+   * generaría otra, dejando la imagen recién subida huérfana.
+   */
   const stored = await getSection(key);
   const storedItems = (stored as Record<string, unknown>)[group.path];
   const known = new Set(
@@ -63,6 +73,12 @@ async function ensureImageKeys(key: SectionKey, data: unknown): Promise<unknown>
           .filter((k): k is string => typeof k === 'string')
       : [],
   );
+
+  const prefix = `${group.path}:`;
+  const uploaded = await (await getImagesCollection())
+    .find({ _id: { $regex: `^${prefix}` } }, { projection: { _id: 1 } })
+    .toArray();
+  for (const row of uploaded) known.add(row._id.slice(prefix.length));
 
   const used = new Set<string>();
   const next = items.map((item) => {
@@ -100,10 +116,27 @@ async function resolveCardSlot(slotId: string): Promise<ImageSlot | null> {
   const item = items.find(
     (candidate) => (candidate as { imageKey?: unknown })?.imageKey === imageKey,
   ) as Record<string, unknown> | undefined;
-  if (!item) return null;
+
+  /**
+   * Se acepta la clave en DOS casos:
+   *
+   *  a) la tarjeta ya existe en el documento (edición normal);
+   *  b) la clave NO la usa ninguna tarjeta todavía (tarjeta recién creada en el
+   *     formulario, cuya imagen se sube ANTES de guardar el texto).
+   *
+   * Lo que se sigue impidiendo es el caso peligroso: apropiarse de la clave de
+   * OTRA tarjeta para sobrescribir su imagen. Si la clave está en uso, tiene
+   * que ser la del propio item.
+   */
+  if (!item) {
+    const enUso = items.some(
+      (candidate) => (candidate as { imageKey?: unknown })?.imageKey === imageKey,
+    );
+    if (enUso) return null;
+  }
 
   const existing = await (await getImagesCollection()).findOne({ _id: slotId });
-  const title = String(item[group.titleField] ?? 'Tarjeta');
+  const title = item ? String(item[group.titleField] ?? 'Tarjeta') : 'Tarjeta nueva';
 
   return cardSlot(group, imageKey, title, existing?.publicId ?? cardPublicId(group, imageKey));
 }

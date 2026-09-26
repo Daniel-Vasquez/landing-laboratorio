@@ -2,9 +2,11 @@ import { useEffect, useId, useMemo, useState, type SubmitEvent } from 'react';
 import { actions, isActionError, isInputError } from 'astro:actions';
 import type { SectionKey } from '../../lib/content/schemas';
 import type { DeployResult } from '../../lib/deploy';
-import { FIELD_MAP, type Field } from './fieldMap';
+import { FIELD_MAP, emptyItem, type Field } from './fieldMap';
 import { deepClone, getPath, setPath } from './paths';
 import RepeaterField from './RepeaterField';
+import CardImageField from './CardImageField';
+import { cardGroupFor, cardSlotKey, newImageKey } from '../../lib/images/cards';
 import { CharCounter, FieldShell, inputClass } from './fields';
 
 type Status = { state: 'idle' } | { state: 'saving' } | { state: 'error'; message: string };
@@ -26,19 +28,36 @@ const TOAST_MS = 4500;
 /** Lo que devuelve `triggerDeploy` a través de la action. */
 type DeployOutcome = DeployResult;
 
+/** Estado de la imagen de una tarjeta mientras se edita. */
+type CardImageState = { file: File | null; alt: string };
+
 interface Props {
   sectionKey: SectionKey;
   initialData: unknown;
   /** `imageKey`s de las tarjetas que ya tienen imagen subida. */
   imageKeysWithImage?: string[];
+  /** URL y alt actuales por `imageKey`, para la vista previa. */
+  cardImages?: Record<string, { url: string; alt: string }>;
 }
 
 export default function SectionEditor({
   sectionKey,
   initialData,
   imageKeysWithImage = [],
+  cardImages = {},
 }: Props) {
   const withImage = useMemo(() => new Set(imageKeysWithImage), [imageKeysWithImage]);
+
+  /** Grupo de imágenes de tarjeta de esta sección, si lo tiene. */
+  const cardGroup = useMemo(() => cardGroupFor(sectionKey), [sectionKey]);
+
+  /**
+   * Archivos y textos alternativos pendientes, por `imageKey`.
+   *
+   * Nada se sube aquí: `handleSubmit` los resuelve. Así una tarjeta nueva se
+   * crea con su texto y su imagen en una sola acción del usuario.
+   */
+  const [cardState, setCardState] = useState<Record<string, CardImageState>>({});
   /**
    * `pristine` es la última versión CONFIRMADA por el servidor, y es estado,
    * no un `useMemo` sobre `initialData`.
@@ -57,9 +76,18 @@ export default function SectionEditor({
   const baseId = useId();
 
   const fields = FIELD_MAP[sectionKey];
+  const pendingImages = useMemo(
+    () =>
+      Object.entries(cardState).filter(
+        ([key, state]) =>
+          state.file !== null || (state.alt ?? '') !== (cardImages[key]?.alt ?? ''),
+      ),
+    [cardState, cardImages],
+  );
+
   const isDirty = useMemo(
-    () => JSON.stringify(data) !== JSON.stringify(pristine),
-    [data, pristine],
+    () => JSON.stringify(data) !== JSON.stringify(pristine) || pendingImages.length > 0,
+    [data, pristine, pendingImages],
   );
 
   // El aviso de éxito se cierra solo; los de error se quedan hasta el siguiente
@@ -77,6 +105,18 @@ export default function SectionEditor({
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
+
+  function cardImageState(imageKey: string): CardImageState {
+    return cardState[imageKey] ?? { file: null, alt: cardImages[imageKey]?.alt ?? '' };
+  }
+
+  function setCardImage(imageKey: string, patch: Partial<CardImageState>) {
+    setCardState((current) => ({
+      ...current,
+      [imageKey]: { ...cardImageState(imageKey), ...patch },
+    }));
+    setToast((current) => (current?.tone === 'success' ? null : current));
+  }
 
   function update(path: string, value: unknown) {
     setData((current: unknown) => setPath(current, path, value));
@@ -145,6 +185,41 @@ export default function SectionEditor({
     // vuela, y `pristine` debe reflejar exactamente lo que el servidor aceptó.
     const submitted = deepClone(data);
 
+    /**
+     * FASE 1 — imágenes.
+     *
+     * Se suben ANTES de guardar el texto, a propósito. Para una tarjeta nueva,
+     * la fila de imagen es lo que legitima su `imageKey` ante el servidor: si
+     * se guardara primero el texto, el servidor descartaría la clave por
+     * desconocida, generaría otra, y la imagen quedaría huérfana.
+     *
+     * Si una subida falla se aborta aquí y NO se guarda el texto: es preferible
+     * que el editor reintente el conjunto a dejar la tarjeta guardada con una
+     * imagen que nunca llegó.
+     */
+    for (const [imageKey, state] of pendingImages) {
+      if (!state.file && !cardGroup) continue;
+      if (!state.file) continue;
+
+      const form = new FormData();
+      form.set('slotId', cardSlotKey(cardGroup!, imageKey));
+      form.set('alt', state.alt);
+      form.set('file', state.file);
+
+      const { error: uploadError } = await actions.images.replace(form);
+      if (uploadError) {
+        if (isActionError(uploadError) && uploadError.code === 'UNAUTHORIZED') {
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+          return;
+        }
+        const message = `No se pudo subir una imagen: ${uploadError.message}`;
+        setStatus({ state: 'error', message });
+        setToast({ id: Date.now(), tone: 'error', message });
+        return;
+      }
+    }
+
+    // FASE 2 — texto. Ya con las imágenes en su sitio.
     const { data: result, error } = await actions.content.updateSection({
       key: sectionKey,
       data: submitted,
@@ -177,6 +252,16 @@ export default function SectionEditor({
     setPristine(submitted);
     setStatus({ state: 'idle' });
     setToast(describeDeploy(result.deploy));
+
+    /**
+     * Si se subieron imágenes, hay que recargar: sus URLs las genera el
+     * servidor y el estado local no las conoce. Se espera a que el aviso se
+     * lea antes de refrescar.
+     */
+    if (pendingImages.some(([, state]) => state.file)) {
+      setCardState({});
+      setTimeout(() => window.location.reload(), TOAST_MS);
+    }
   }
 
   function renderField(field: Field, absolutePath = field.path): React.ReactNode {
@@ -193,6 +278,39 @@ export default function SectionEditor({
           onChange={(next) => update(absolutePath, next)}
           renderItemField={(sub, subPath) => renderField(sub, subPath)}
           imageKeysWithImage={withImage}
+          makeItem={
+            cardGroup && absolutePath === cardGroup.path
+              ? () => ({ ...emptyItem(field.fields), imageKey: newImageKey() })
+              : undefined
+          }
+          renderCardImage={
+            cardGroup && absolutePath === cardGroup.path
+              ? (item, index) => {
+                  const imageKey = (item as { imageKey?: unknown })?.imageKey;
+                  if (typeof imageKey !== 'string') return null;
+                  const state = cardImageState(imageKey);
+                  const stored = cardImages[imageKey];
+                  const title =
+                    String((item as Record<string, unknown>)[cardGroup.titleField] ?? '') ||
+                    `${field.itemLabel} ${index + 1}`;
+                  return (
+                    <CardImageField
+                      cardTitle={title}
+                      currentUrl={stored?.url ?? null}
+                      file={state.file}
+                      alt={state.alt}
+                      aspect={cardGroup.aspect}
+                      disabled={saving}
+                      onFileChange={(file) => setCardImage(imageKey, { file })}
+                      onAltChange={(alt) => setCardImage(imageKey, { alt })}
+                      onError={(message) =>
+                        setToast({ id: Date.now(), tone: 'error', message })
+                      }
+                    />
+                  );
+                }
+              : undefined
+          }
         />
       );
     }
