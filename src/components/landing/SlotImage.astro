@@ -27,7 +27,11 @@ const { width, height } = slotDimensions(slot);
       src={cloudinaryUrl(image, slot.displayWidth)}
       srcset={cloudinarySrcSet(image, slot)}
       sizes={sizes ?? `${slot.displayWidth}px`}
-      alt={image.alt}
+      /* `?? ''` obligatorio: Astro OMITE el atributo si el valor es undefined,
+         y una <img> sin `alt` es un fallo de accesibilidad. Con cadena vacía
+         emite alt="" y el lector de pantalla la ignora, que es el
+         comportamiento correcto para una imagen decorativa. */
+      alt={image.alt ?? ''}
       width={width}
       height={height}
       /* El hero es el LCP: debe cargarse de inmediato y con prioridad alta.

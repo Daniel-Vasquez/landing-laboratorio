@@ -226,10 +226,30 @@ async function database() {
     const rows = await db.collection('landing_images').find({}, { projection: { _id: 1 } }).toArray();
     const have = new Set(rows.map((r) => r._id));
     const without = slots.IMAGE_SLOTS.filter((s) => !have.has(s.id)).map((s) => s.id);
+
+    // Ranuras de tarjeta: se derivan del contenido, no del registro.
+    const cards = await import('../src/lib/images/cards.ts');
+    let cardTotal = 0;
+    for (const group of cards.CARD_IMAGE_GROUPS) {
+      const section = await db.collection('landing_sections').findOne({ _id: group.section });
+      const items = section?.data?.[group.path];
+      if (!Array.isArray(items)) continue;
+      for (const item of items) {
+        cardTotal++;
+        const title = String(item?.[group.titleField] ?? '(sin título)');
+        if (typeof item?.imageKey !== 'string') {
+          without.push(`${title} (sin imageKey: guarda la sección)`);
+        } else if (!have.has(cards.cardSlotKey(group, item.imageKey))) {
+          without.push(`${title} (tarjeta sin imagen)`);
+        }
+      }
+    }
+
+    const total = slots.IMAGE_SLOTS.length + cardTotal;
     if (without.length) {
-      warn(`Ranuras de imagen sin asset (renderizarán placeholder): ${without.join(', ')}`);
+      warn(`Ranuras sin imagen (renderizarán placeholder): ${without.join(', ')}`);
     } else {
-      ok(`Las ${slots.IMAGE_SLOTS.length} ranuras de imagen tienen asset.`);
+      ok(`Las ${total} ranuras de imagen tienen asset (${slots.IMAGE_SLOTS.length} fijas + ${cardTotal} de tarjeta).`);
     }
   } catch (e) {
     warn(`No se pudieron comprobar las ranuras de imagen: ${e.message}`);

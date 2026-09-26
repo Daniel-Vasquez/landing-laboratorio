@@ -82,7 +82,7 @@ export const IMAGE_SLOTS: readonly ImageSlot[] = [
     section: 'cta_final',
     label: 'Imagen de Tu salud no puede esperar (lado derecho)',
     altDefault:
-      null,
+      'Profesional de la salud sosteniendo con ambas manos la mano de una persona mayor sobre una mesa',
     placement: 'aside-right',
     aspect: '16/9',
     displayWidth: 560,
