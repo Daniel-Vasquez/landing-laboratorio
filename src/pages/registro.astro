@@ -1,0 +1,38 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import AuthForm from '../components/admin/AuthForm.tsx';
+import { signupEnabled, signupInviteCode } from '../lib/auth.ts';
+
+export const prerender = false;
+
+/**
+ * Con el registro cerrado se responde 404, no 403: un 403 confirmaría que la
+ * ruta existe. El bloqueo REAL vive en el handler de /api/auth (un POST directo
+ * no pasa por esta página).
+ */
+if (!signupEnabled) {
+  return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+if (Astro.locals.user) {
+  return Astro.redirect('/admin', 302);
+}
+---
+<AuthLayout
+  title="Crear cuenta"
+  subtitle="Registra tu acceso al panel de administración."
+>
+  <AuthForm
+    client:load
+    mode="signup"
+    redirectTo="/admin"
+    requireInviteCode={Boolean(signupInviteCode)}
+  />
+
+  <Fragment slot="footer">
+    ¿Ya tienes cuenta?{' '}
+    <a href="/login" class="font-medium text-accent underline-offset-4 hover:underline">
+      Entrar
+    </a>
+  </Fragment>
+</AuthLayout>

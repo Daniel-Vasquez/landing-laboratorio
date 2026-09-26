@@ -13,7 +13,7 @@
 | Solicitado | Realidad técnica | Decisión adoptada |
 |---|---|---|
 | `output: 'hybrid'` | Eliminado en Astro 5. `static` + `prerender=false` por ruta lo reemplaza. | `output: 'static'` con `adapter: vercel()`. Cada ruta de `/admin` y `/api` declara `export const prerender = false`. |
-| `@better-auth/mongo-adapter` | Paquete inexistente. El adaptador vive en el core. | `import { mongodbAdapter } from "better-auth/adapters/mongodb"` |
+| `@better-auth/mongo-adapter` | **Mi corrección inicial era errónea: el paquete SÍ existe** y es dependencia directa de `better-auth@1.7.6`, que lo re-exporta. | `import { mongodbAdapter } from "better-auth/adapters/mongodb"` — vía el core, para no fijar a mano una versión que better-auth ya pinea. Firma real: `mongodbAdapter(db, { client?, usePlural?, transaction? })`. |
 | Integración `@astrojs/tailwind` | Deprecada a favor del plugin Vite de Tailwind v4. | `@tailwindcss/vite` declarado en `vite.plugins` de `astro.config.mjs`. |
 | `edgeMiddleware: false` | Deprecado en `@astrojs/vercel` v11. | `middlewareMode: 'classic'` (mismo efecto: middleware en runtime Node). |
 | React para el toggle de tema y el menú móvil | El runtime de React DOM pesa ~66 KB gzip. **Medido en Tanda 1: 72 KB con React vs 1.97 KB sin él.** | Ambos reescritos en vanilla (`.astro` + `<dialog>` nativo). React queda **solo** en `/admin`. |
@@ -749,7 +749,9 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { db } from './mongo';
 
 export const auth = betterAuth({
-  database: mongodbAdapter(db),
+  // `client` habilita transacciones. Atlas (incluido M0) es replica set y las
+  // soporta; con un mongod standalone habría que pasar `transaction: false`.
+  database: mongodbAdapter(getDbSync(), { client: getClientSync() }),
   secret: import.meta.env.BETTER_AUTH_SECRET,
   baseURL: import.meta.env.BETTER_AUTH_URL,
   basePath: '/api/auth',
@@ -778,6 +780,15 @@ export type Session = Awaited<ReturnType<typeof auth.api.getSession>>;
 
 > `session.cookieCache` es importante: sin él, cada request a `/admin` hace un `findOne` en
 > `session`. Con él, la sesión se valida desde una cookie firmada durante 5 min.
+
+> **`mongodbAdapter` exige un `Db` SINCRÓNICO**, pero `getDb()` es async. Por eso `mongo.ts`
+> expone también `getDbSync()` / `getClientSync()`: el constructor de `MongoClient` y `.db()`
+> son sincrónicos y el driver conecta perezosamente en la primera operación. Ambas variantes
+> comparten la cache de `globalThis`, para que nunca existan dos pools contra el mismo cluster.
+
+> **`emailAndPassword` NO tiene `disableSignUp`** (esa opción es solo de los proveedores OAuth,
+> verificado en el código del paquete). La compuerta de registro se implementa en el handler de
+> `/api/auth`, antes de delegar a Better Auth.
 
 ### 4.2 `src/pages/api/auth/[...all].ts`
 
@@ -837,10 +848,18 @@ import { auth } from './lib/auth';
 const PROTECTED = /^\/admin(\/|$)/;
 
 export const onRequest = defineMiddleware(async (ctx, next) => {
-  // No tocar rutas prerenderizadas ni el handler de auth
+  // Las rutas prerenderizadas se renderizan en BUILD TIME, sin petición real:
+  // leer `ctx.request.headers` ahí emite un warning de Astro y no devuelve nada.
+  if (ctx.isPrerendered) return next();
+
   if (ctx.url.pathname.startsWith('/api/auth')) return next();
 
-  const session = await auth.api.getSession({ headers: ctx.request.headers });
+  // FALLAR CERRADO: si MongoDB no responde, `getSession` lanza y la ruta daría
+  // un 500. Un fallo de base de datos se trata como "sin sesión" -> /login.
+  let session = null;
+  try {
+    session = await auth.api.getSession({ headers: ctx.request.headers });
+  } catch (error) { console.error('[auth]', error); }
   ctx.locals.user = session?.user ?? null;
   ctx.locals.session = session?.session ?? null;
 
@@ -872,6 +891,9 @@ declare namespace App {
 - [ ] Login setea cookie `lab.session_token` con `HttpOnly`, `Secure` (en prod), `SameSite=Lax`.
 - [ ] `GET /admin` sin sesión → 302 a `/login?redirect=%2Fadmin`.
 - [ ] Tras login exitoso redirige al `?redirect=` original.
+- [ ] **Open redirect:** `/login?redirect=https://malicioso.example` NO lleva a ese dominio
+      (`safeRedirect` en `src/lib/redirect.ts` rechaza `//host`, `\\` y URLs absolutas).
+- [ ] Con Atlas caído y una cookie de sesión presente, `/admin` responde 302 a `/login`, NO 500.
 - [ ] Logout borra la cookie y `/admin` vuelve a redirigir.
 - [ ] Email duplicado en registro → error controlado en español, sin 500.
 - [ ] Password de 9 chars → rechazada por Zod antes de llegar a Better Auth.
@@ -1378,6 +1400,10 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 14 | `import.meta.env` en código compartido con `scripts/` | `TypeError` al ejecutar con node | Solo `process.env`, centralizado en `src/lib/env.ts`. |
 | 15 | Conexión a Mongo en el nivel superior del módulo | El `throw` del import anula el fallback a semilla | `getDb()` perezoso + cache en `globalThis`. |
 | 16 | CTA final apuntando a `#agendar` (su propia sección) | Enlace muerto: el visitante no tiene cómo convertir | **PENDIENTE de input del cliente:** WhatsApp o `tel:`. Editable desde el dashboard sin tocar código. |
+| 17 | Middleware corriendo en rutas prerenderizadas | Warning de Astro en build; lectura de headers inexistentes | Guarda `ctx.isPrerendered` como primera línea. |
+| 18 | `getSession` lanzando por fallo de base | 500 en `/admin` en vez de redirigir | `try/catch` -> se trata como sin sesión (fail closed). |
+| 19 | Open redirect vía `?redirect=` | Phishing: el usuario acaba en otro dominio tras autenticarse | `safeRedirect()` valida que sea ruta interna. 7 casos cubiertos. |
+| 20 | Node local 26 vs Node 24 en Vercel | Una API solo de Node 26 rompería en producción | Hoy no se usa ninguna (`process.loadEnvFile` existe desde 20.12). Para fijarlo: `engines.node: "24.x"` en package.json. |
 
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
 

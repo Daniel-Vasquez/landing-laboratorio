@@ -1,0 +1,24 @@
+---
+/**
+ * TANDA 4 — placeholder. Su único fin es que exista una ruta protegida contra
+ * la que verificar el middleware. La TANDA 5 lo reemplaza por el shell real
+ * del dashboard con el índice de secciones.
+ */
+export const prerender = false;
+
+const user = Astro.locals.user!;
+---
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Panel | Hospital Cristal</title>
+  </head>
+  <body>
+    <h1>Panel de administración</h1>
+    <p data-testid="user-name">{user.name}</p>
+    <p data-testid="user-email">{user.email}</p>
+    <form method="post" action="/api/auth/sign-out"><button type="submit">Cerrar sesión</button></form>
+  </body>
+</html>

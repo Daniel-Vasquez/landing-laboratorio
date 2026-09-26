@@ -1,0 +1,54 @@
+---
+import '../styles/global.css';
+import ThemeScript from '../components/ui/ThemeScript.astro';
+import ThemeToggle from '../components/ui/ThemeToggle.astro';
+
+interface Props {
+  title: string;
+  subtitle: string;
+}
+const { title, subtitle } = Astro.props;
+---
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <ThemeScript />
+    <title>{title} | Hospital Cristal</title>
+    {/* Las pantallas de sesión nunca se indexan. robots.txt las excluye del
+        rastreo; esto evita la indexación si alguien las enlaza desde fuera. */}
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0d9488" />
+  </head>
+
+  <body class="min-h-dvh bg-surface-muted text-fg">
+    <div class="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-12">
+      <div class="mb-6 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2.5 text-sm font-semibold text-fg">
+          <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-fg" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5">
+              <path d="M9 2h6M10 2v6.5L5.8 16.4A3 3 0 0 0 8.4 21h7.2a3 3 0 0 0 2.6-4.6L14 8.5V2" />
+              <path d="M7.5 15h9" />
+            </svg>
+          </span>
+          <span>Hospital Cristal</span>
+        </a>
+        <ThemeToggle />
+      </div>
+
+      <main class="rounded-2xl border border-border bg-surface p-6 sm:p-8">
+        <h1 class="text-2xl font-bold">{title}</h1>
+        <p class="mt-2 text-sm text-fg-muted">{subtitle}</p>
+        <div class="mt-7">
+          <slot />
+        </div>
+      </main>
+
+      <p class="mt-6 text-center text-sm text-fg-muted">
+        <slot name="footer" />
+      </p>
+    </div>
+  </body>
+</html>

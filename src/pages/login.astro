@@ -1,0 +1,32 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import AuthForm from '../components/admin/AuthForm.tsx';
+import { signupEnabled } from '../lib/auth.ts';
+import { safeRedirect } from '../lib/redirect.ts';
+
+export const prerender = false;
+
+const redirectTo = safeRedirect(Astro.url.searchParams.get('redirect'));
+
+// Si ya hay sesión, no tiene sentido mostrar el formulario.
+// `Astro.locals.user` lo inyecta src/middleware.ts.
+if (Astro.locals.user) {
+  return Astro.redirect(redirectTo, 302);
+}
+---
+<AuthLayout title="Entrar al panel" subtitle="Accede con tu correo y contraseña.">
+  <AuthForm client:load mode="login" redirectTo={redirectTo} />
+
+  <Fragment slot="footer">
+    {signupEnabled ? (
+      <>
+        ¿No tienes cuenta?{' '}
+        <a href="/registro" class="font-medium text-accent underline-offset-4 hover:underline">
+          Crear una
+        </a>
+      </>
+    ) : (
+      <>El registro de nuevas cuentas está cerrado.</>
+    )}
+  </Fragment>
+</AuthLayout>

@@ -37,16 +37,16 @@ export function isMongoConfigured(): boolean {
 }
 
 /**
- * Conexión perezosa. NO se conecta al importar el módulo: si lanzara en el
- * import, el fallback a contenido semilla del repositorio nunca se ejecutaría.
+ * Crea cliente y Db sin conectar. El constructor de MongoClient y `.db()` son
+ * sincrónicos: el driver abre el socket perezosamente en la primera operación.
+ * Better Auth necesita un `Db` sincrónico al construir su adaptador, así que
+ * esta variante existe para ese caso; ambas comparten la misma cache, para que
+ * nunca haya dos pools de conexiones apuntando al mismo cluster.
  */
-export async function getDb(): Promise<Db> {
-  if (globalCache.__labMongo) return globalCache.__labMongo.db;
+function createIfNeeded(): { client: MongoClient; db: Db } {
+  if (globalCache.__labMongo) return globalCache.__labMongo;
 
-  const uri = requireEnv('MONGODB_URI');
-  const dbName = requireEnv('MONGODB_DB_NAME');
-
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(requireEnv('MONGODB_URI'), {
     // Serverless: muchas instancias con pools pequeños, no lo contrario.
     maxPoolSize: 5,
     minPoolSize: 0,
@@ -55,9 +55,31 @@ export async function getDb(): Promise<Db> {
     appName: 'landing-laboratorio',
   });
 
+  const entry = { client, db: client.db(requireEnv('MONGODB_DB_NAME')) };
+  globalCache.__labMongo = entry;
+  return entry;
+}
+
+/** Sincrónico. Para Better Auth, que construye su adaptador en el import. */
+export function getDbSync(): Db {
+  return createIfNeeded().db;
+}
+
+export function getClientSync(): MongoClient {
+  return createIfNeeded().client;
+}
+
+/**
+ * Asíncrono: fuerza `connect()` para que un fallo de credenciales o de red
+ * aparezca aquí, con mensaje claro, en lugar de en la primera query.
+ * `connect()` es idempotente, así que llamarlo por request no abre pools nuevos.
+ *
+ * NO se conecta al importar el módulo: si lanzara en el import, el fallback a
+ * contenido semilla del repositorio nunca llegaría a ejecutarse.
+ */
+export async function getDb(): Promise<Db> {
+  const { client, db } = createIfNeeded();
   await client.connect();
-  const db = client.db(dbName);
-  globalCache.__labMongo = { client, db };
   return db;
 }
 
