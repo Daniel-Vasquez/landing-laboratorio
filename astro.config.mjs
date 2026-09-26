@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
+import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -45,7 +46,16 @@ export default defineConfig({
     maxDuration: 15,
   }),
 
-  integrations: [react()],
+  integrations: [
+    react(),
+    sitemap({
+      // El dashboard, la API y las pantallas de sesión nunca se indexan.
+      filter: (page) =>
+        !['/admin', '/api', '/login', '/registro'].some((path) =>
+          new URL(page).pathname.startsWith(path),
+        ),
+    }),
+  ],
 
   vite: {
     plugins: [tailwindcss()],

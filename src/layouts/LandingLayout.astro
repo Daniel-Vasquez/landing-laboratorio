@@ -3,23 +3,28 @@ import '../styles/global.css';
 import ThemeScript from '../components/ui/ThemeScript.astro';
 import Header from '../components/landing/Header.astro';
 import Footer from '../components/landing/Footer.astro';
+import type { LandingContent } from '../lib/content/schemas.ts';
 
 interface Props {
-  title: string;
-  description: string;
-  keywords?: string[];
+  seo: LandingContent['seo'];
+  avisos: LandingContent['avisos'];
+  address: string;
+  /** Objeto JSON-LD ya construido. Se serializa aquí. */
+  jsonLd?: unknown;
   ogImage?: string;
 }
 
-const { title, description, keywords = [], ogImage = '/og-default.png' } = Astro.props;
+const { seo, avisos, address, jsonLd, ogImage = '/og-default.png' } = Astro.props;
 
 // `Astro.site` viene de `site` en astro.config.mjs (PUBLIC_SITE_URL).
 const canonical = new URL(Astro.url.pathname, Astro.site ?? 'http://localhost:4321');
 const ogImageUrl = new URL(ogImage, canonical);
 
-// Sufijo de marca aplicado aquí, no en el campo SEO de la base:
-// mantiene `seo.title` dentro del límite de 70 caracteres del SERP.
-const fullTitle = title.includes('Hospital Cristal') ? title : `${title} | Hospital Cristal`;
+// El sufijo de marca se aplica aquí, no en el campo SEO de la base: así
+// `seo.title` se mantiene dentro del límite de 70 caracteres del SERP.
+const fullTitle = seo.title.includes('Hospital Cristal')
+  ? seo.title
+  : `${seo.title} | Hospital Cristal`;
 ---
 <!doctype html>
 <html lang="es-MX">
@@ -30,15 +35,15 @@ const fullTitle = title.includes('Hospital Cristal') ? title : `${title} | Hospi
     <ThemeScript />
 
     <title>{fullTitle}</title>
-    <meta name="description" content={description} />
-    {keywords.length > 0 && <meta name="keywords" content={keywords.join(', ')} />}
+    <meta name="description" content={seo.description} />
+    {seo.keywords.length > 0 && <meta name="keywords" content={seo.keywords.join(', ')} />}
     <link rel="canonical" href={canonical.href} />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Laboratorio Clínico Hospital Cristal" />
     <meta property="og:locale" content="es_MX" />
     <meta property="og:title" content={fullTitle} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={seo.description} />
     <meta property="og:url" content={canonical.href} />
     <meta property="og:image" content={ogImageUrl.href} />
     <meta name="twitter:card" content="summary_large_image" />
@@ -46,6 +51,10 @@ const fullTitle = title.includes('Hospital Cristal') ? title : `${title} | Hospi
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="theme-color" content="#0d9488" />
     <meta name="generator" content={Astro.generator} />
+
+    {jsonLd && (
+      <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} is:inline />
+    )}
   </head>
 
   <body class="min-h-dvh bg-bg text-fg">
@@ -62,6 +71,6 @@ const fullTitle = title.includes('Hospital Cristal') ? title : `${title} | Hospi
       <slot />
     </main>
 
-    <Footer />
+    <Footer avisos={avisos} address={address} />
   </body>
 </html>

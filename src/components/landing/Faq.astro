@@ -1,0 +1,46 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Section from './Section.astro';
+import Button from '../ui/Button.astro';
+
+interface Props {
+  data: LandingContent['faq'];
+}
+const { data } = Astro.props;
+
+/**
+ * Acordeón con <details>/<summary> nativos: accesible por defecto (rol,
+ * aria-expanded y navegación por teclado los da el navegador) y 0 KB de JS.
+ * Funciona con JavaScript deshabilitado.
+ */
+---
+<Section id="faq" tone="muted" eyebrow={data.eyebrow} title="Preguntas frecuentes">
+  <div class="mt-10 max-w-3xl divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+    {data.items.map((item) => (
+      <details class="group">
+        <summary
+          class="flex cursor-pointer items-center justify-between gap-4 p-5 text-left font-semibold marker:content-none [&::-webkit-details-marker]:hidden"
+        >
+          <span>{item.pregunta}</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="size-5 shrink-0 text-accent transition-transform duration-200 group-open:rotate-180"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        <p class="px-5 pb-5 text-sm leading-relaxed text-fg-muted">{item.respuesta}</p>
+      </details>
+    ))}
+  </div>
+
+  <div class="mt-10">
+    <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+  </div>
+</Section>

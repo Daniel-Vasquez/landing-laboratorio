@@ -1,107 +1,44 @@
 ---
 /**
- * TANDA 1 — página provisional.
+ * Landing page — 100% estática (SSG).
  *
- * Su único propósito es validar el design system: tokens, tema Light/Dark sin
- * FOUC, layout, header sticky, navegación móvil y presupuesto de JS.
- * La TANDA 3 la reemplaza por las 9 secciones reales alimentadas desde MongoDB.
- * El contenido de abajo está hardcodeado a propósito: en esta Tanda todavía no
- * existe la capa de datos.
+ * `getLandingContent()` se ejecuta UNA vez, en build time. El HTML resultante
+ * es inmutable: en producción esta página no hace ninguna query a MongoDB.
+ * Para que un cambio de contenido se refleje hace falta un redeploy, que el
+ * dashboard dispara vía Deploy Hook de Vercel (Tanda 7).
  */
 import LandingLayout from '../layouts/LandingLayout.astro';
-import Button from '../components/ui/Button.astro';
+import Hero from '../components/landing/Hero.astro';
+import EstudiosPrincipales from '../components/landing/EstudiosPrincipales.astro';
+import PorQueEstudios from '../components/landing/PorQueEstudios.astro';
+import EstudiosAdicionales from '../components/landing/EstudiosAdicionales.astro';
+import PorQueHospital from '../components/landing/PorQueHospital.astro';
+import Testimonios from '../components/landing/Testimonios.astro';
+import Videos from '../components/landing/Videos.astro';
+import Faq from '../components/landing/Faq.astro';
+import CtaFinal from '../components/landing/CtaFinal.astro';
+import { getLandingContent } from '../lib/content/repository.ts';
+import { buildJsonLd } from '../lib/seo.ts';
 
 export const prerender = true;
 
-// `swatch` lleva la clase COMPLETA como string literal: el scanner de Tailwind 4
-// lee el código fuente como texto y no resuelve interpolaciones como `bg-${name}`.
-const tokens = [
-  { name: 'bg', label: 'Fondo de página', swatch: 'bg-bg' },
-  { name: 'surface', label: 'Tarjetas', swatch: 'bg-surface' },
-  { name: 'surface-muted', label: 'Bandas alternas', swatch: 'bg-surface-muted' },
-  { name: 'border', label: 'Bordes', swatch: 'bg-border' },
-  { name: 'primary', label: 'CTA principal', swatch: 'bg-primary' },
-  { name: 'accent', label: 'Links y datos', swatch: 'bg-accent' },
-  { name: 'fg', label: 'Texto principal', swatch: 'bg-fg' },
-  { name: 'fg-muted', label: 'Texto secundario', swatch: 'bg-fg-muted' },
-];
+const content = await getLandingContent();
+const siteUrl = (Astro.site ?? new URL('http://localhost:4321')).href;
+const jsonLd = buildJsonLd(content, siteUrl);
 ---
 <LandingLayout
-  title="Laboratorio Clínico en Zumpango | Resultados el Mismo Día"
-  description="Laboratorio clínico completo en Zumpango de Ocampo. Más de 200 estudios con resultados precisos el mismo día y precios accesibles. Agenda hoy."
-  keywords={['laboratorio clínico Zumpango', 'estudios de laboratorio Zumpango']}
+  seo={content.seo}
+  avisos={content.avisos}
+  address={content.hero.address}
+  jsonLd={jsonLd}
 >
-  <section class="bg-bg">
-    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
-      <p class="text-sm font-semibold uppercase tracking-wide text-accent">
-        Hospital Cristal · Zumpango
-      </p>
-      <h1 class="mt-4 max-w-3xl text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-        La tranquilidad de saber que tu familia está bien empieza con un diagnóstico a tiempo
-      </h1>
-      <p class="mt-6 max-w-2xl text-lg text-fg-muted">
-        En el Laboratorio Clínico de Hospital Cristal cuidamos de quienes más amas con estudios
-        precisos y seguros.
-      </p>
-
-      <ul class="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
-        {[
-          'Resultados el mismo día',
-          'Más de 200 pruebas distintas',
-          'Precios accesibles',
-        ].map((bullet) => (
-          <li class="flex items-start gap-2.5 rounded-lg border border-border bg-surface p-4 text-sm font-medium">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true">
-              <path d="m20 6L9 17l-5-5" />
-            </svg>
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
-
-      <div class="mt-10 flex flex-wrap items-center gap-3">
-        <Button href="#agendar" size="lg">Agenda tu estudio</Button>
-        <Button href="#tokens" variant="secondary" size="lg">Ver design system</Button>
-      </div>
-    </div>
-  </section>
-
-  <section id="tokens" class="border-y border-border bg-surface-muted">
-    <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-      <h2 class="text-2xl font-bold sm:text-3xl">Verificación del design system</h2>
-      <p class="mt-3 max-w-2xl text-fg-muted">
-        Alterna el tema con el botón del header: los ocho tokens deben cambiar en conjunto y
-        persistir al recargar, sin destello blanco.
-      </p>
-
-      <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {tokens.map((token) => (
-          <div class="overflow-hidden rounded-lg border border-border bg-surface">
-            <div class:list={['h-16', token.swatch]}></div>
-            <div class="border-t border-border p-3">
-              <p class="font-mono text-xs font-semibold">--color-{token.name}</p>
-              <p class="mt-1 text-xs text-fg-muted">{token.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
-
-  <section id="agendar" class="bg-bg">
-    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-      <div class="rounded-2xl border border-border bg-surface p-8 sm:p-12">
-        <h2 class="text-2xl font-bold sm:text-3xl">Tu salud no puede esperar</h2>
-        <p class="mt-3 max-w-2xl text-fg-muted">
-          Agenda tus estudios de laboratorio en Hospital Cristal y conoce tu estado de salud hoy.
-        </p>
-        <address class="mt-6 text-sm not-italic text-fg-muted">
-          📍 Melchor Ocampo 233, Santiago 1ra Secc, Zumpango, Estado de México.
-        </address>
-        <div class="mt-8">
-          <Button href="#agendar" size="lg">Agenda tu estudio</Button>
-        </div>
-      </div>
-    </div>
-  </section>
+  <Hero data={content.hero} />
+  <EstudiosPrincipales data={content.estudios_principales} />
+  <PorQueEstudios data={content.por_que_estudios} />
+  <EstudiosAdicionales data={content.estudios_adicionales} />
+  <PorQueHospital data={content.por_que_hospital} />
+  <Testimonios data={content.testimonios} />
+  <Videos data={content.videos} />
+  <Faq data={content.faq} />
+  <CtaFinal data={content.cta_final} address={content.hero.address} />
 </LandingLayout>

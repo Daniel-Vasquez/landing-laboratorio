@@ -1,0 +1,29 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Section from './Section.astro';
+import Button from '../ui/Button.astro';
+
+interface Props {
+  data: LandingContent['por_que_estudios'];
+}
+const { data } = Astro.props;
+---
+<Section id="por-que" eyebrow="Detección oportuna" title={data.eyebrow}>
+  <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>
+
+  <p class="mt-10 text-sm font-semibold uppercase tracking-wide text-fg">{data.datosLabel}</p>
+
+  <ul class="mt-5 grid gap-4 lg:grid-cols-3">
+    {data.datos.map((dato) => (
+      <li class="rounded-xl border-l-4 border-l-accent border-y border-r border-border bg-surface p-5">
+        <p class="text-sm leading-relaxed text-fg-muted">{dato}</p>
+      </li>
+    ))}
+  </ul>
+
+  <p class="mt-10 max-w-3xl text-lg font-medium">{data.cierre}</p>
+
+  <div class="mt-8">
+    <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+  </div>
+</Section>

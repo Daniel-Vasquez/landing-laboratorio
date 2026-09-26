@@ -1,0 +1,43 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Button from '../ui/Button.astro';
+
+interface Props {
+  data: LandingContent['hero'];
+}
+const { data } = Astro.props;
+---
+<section id="inicio" class="bg-bg">
+  <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:py-28">
+    <h1 class="max-w-4xl text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
+      {data.headline}
+    </h1>
+
+    <p class="mt-6 max-w-2xl text-lg text-fg-muted sm:text-xl">
+      {data.subheadline}
+    </p>
+
+    <ul class="mt-10 grid max-w-3xl gap-3 sm:grid-cols-3">
+      {data.bullets.map((bullet) => (
+        <li class="flex items-start gap-2.5 rounded-xl border border-border bg-surface p-4 text-sm font-medium">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true">
+            <path d="m20 6L9 17l-5-5" />
+          </svg>
+          <span>{bullet}</span>
+        </li>
+      ))}
+    </ul>
+
+    <p class="mt-10 flex items-start gap-2 text-sm text-fg-muted">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+        <circle cx="12" cy="10" r="3" />
+      </svg>
+      <span>{data.address}</span>
+    </p>
+
+    <div class="mt-8">
+      <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+    </div>
+  </div>
+</section>

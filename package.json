@@ -8,10 +8,13 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "astro": "astro"
+    "astro": "astro",
+    "db:indexes": "node --env-file=.env scripts/ensure-indexes.ts",
+    "db:seed": "node --env-file=.env scripts/seed.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",
+    "@astrojs/sitemap": "^3.7.4",
     "@astrojs/vercel": "^11.0.11",
     "astro": "^7.3.5",
     "better-auth": "^1.7.6",

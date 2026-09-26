@@ -1,0 +1,41 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Section from './Section.astro';
+import Button from '../ui/Button.astro';
+
+interface Props {
+  data: LandingContent['por_que_hospital'];
+}
+const { data } = Astro.props;
+
+/** Un icono por beneficio, en el orden del contenido. Si se agregan más
+ *  beneficios desde el dashboard, los extra caen en el icono por defecto. */
+const icons = [
+  'M12 6v6l4 2',                                              // reloj
+  'm9 11 3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', // check
+  'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',  // precio
+  'M4 6h16M4 12h16M4 18h10',                                   // catálogo
+  'm4.9 4.9 14.2 14.2M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20',  // sin trabas
+  'M3 21h18M5 21V7l8-4v18M19 21V11l-6-4',                      // hospital
+];
+const fallbackIcon = 'M20 6 9 17l-5-5';
+---
+<Section id="beneficios" eyebrow="Ventajas" title={data.eyebrow}>
+  <ul class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {data.beneficios.map((beneficio, i) => (
+      <li class="rounded-xl border border-border bg-surface p-6">
+        <span class="grid size-11 place-items-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5">
+            <path d={icons[i] ?? fallbackIcon} />
+          </svg>
+        </span>
+        <h3 class="mt-4 text-lg font-semibold">{beneficio.titulo}</h3>
+        <p class="mt-2 text-sm leading-relaxed text-fg-muted">{beneficio.descripcion}</p>
+      </li>
+    ))}
+  </ul>
+
+  <div class="mt-10">
+    <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+  </div>
+</Section>

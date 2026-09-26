@@ -1,0 +1,75 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Section from './Section.astro';
+
+interface Props {
+  data: LandingContent['videos'];
+}
+const { data } = Astro.props;
+
+/**
+ * Patrón "facade": tarjetas estáticas que enlazan a Instagram, NO el embed
+ * oficial.
+ *
+ * El script de Instagram (embed.js) pesa ~250 KB, hace 10+ peticiones a
+ * terceros y provoca CLS al inyectar iframes de altura variable. En una landing
+ * cuyo requisito es la máxima velocidad de carga, eso destruye el LCP.
+ *
+ * PENDIENTE (acción manual del cliente): subir 7 thumbnails a /public/videos/
+ * en AVIF o WebP y rellenar el campo `thumbnail` de cada video desde el
+ * dashboard. Mientras estén vacíos se renderiza un placeholder con degradado.
+ */
+---
+{data.items.length > 0 && (
+  <Section id="videos" eyebrow={data.eyebrow} title="Conoce nuestro laboratorio">
+    {data.intro && <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>}
+
+    <ul class="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      {data.items.map((item) => (
+        <li>
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="group block overflow-hidden rounded-xl border border-border bg-surface transition-colors hover:border-primary"
+          >
+            <div class="relative aspect-[4/5] overflow-hidden bg-surface-muted">
+              {item.thumbnail ? (
+                <img
+                  src={item.thumbnail}
+                  alt={item.titulo}
+                  width="320"
+                  height="400"
+                  loading="lazy"
+                  decoding="async"
+                  class="size-full object-cover"
+                />
+              ) : (
+                /* Placeholder: mismo aspect-ratio que el thumbnail real, así
+                   sustituirlo no provoca reflow (CLS = 0). */
+                <div
+                  class="size-full bg-gradient-to-br from-primary/20 via-surface-muted to-accent/20"
+                  aria-hidden="true"
+                ></div>
+              )}
+              <span
+                class="absolute inset-0 grid place-items-center"
+                aria-hidden="true"
+              >
+                <span class="grid size-12 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="ml-0.5 size-5">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </span>
+              </span>
+            </div>
+            <p class="p-3 text-sm font-medium">
+              {item.titulo}
+              <span class="sr-only"> (se abre en Instagram, en una pestaña nueva)</span>
+            </p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </Section>
+)}

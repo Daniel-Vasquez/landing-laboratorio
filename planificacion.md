@@ -51,12 +51,24 @@ desde el frontmatter de páginas prerenderizadas o desde server actions.
 | `session` | Better Auth | Sesiones activas (cookie-based) |
 | `account` | Better Auth | Credenciales (hash de password en `account.password`) |
 | `verification` | Better Auth | Tokens. Se crea aunque no usemos verificación. |
-| `landing_sections` | App | **Documento por sección.** `{ _id: ObjectId, key: string (unique), order: number, data: object, updatedAt: Date, updatedBy: { userId, name } }` |
+| `landing_sections` | App | **Documento por sección.** `{ _id: SectionKey, data: object, updatedAt: Date, updatedBy: { userId, name, email } \| null }` — **la clave de sección ES el `_id`** (ver 0.3.1). |
 | `app_meta` | App | Singletons de sistema. Docs con `_id` string: `"last_change"`, `"deploy_state"`. |
 
 **Por qué documento-por-sección y no un único doc `landing`:** permite guardado granular
-(un editor toca solo el Hero → un solo `updateOne`), evita conflictos de escritura concurrente,
-y permite reordenar secciones sin reescribir todo el payload.
+(un editor toca solo el Hero → un solo `updateOne`) y evita conflictos de escritura concurrente.
+
+### 0.3.1 La clave de sección es el `_id` (desviación aplicada en Tanda 2)
+
+En lugar de `_id: ObjectId` más un índice único sobre un campo `key`, se usa la clave de
+sección directamente como `_id`. MongoDB ya indexa `_id` como único, así que:
+
+- las claves duplicadas son **imposibles por construcción**, no por un índice que mantener;
+- se elimina un índice y un modo de fallo completo;
+- `findOne({ _id: 'hero' })` usa el índice primario, sin lookup secundario.
+
+También se eliminó el campo `order`: el orden de render lo fija el orden de los componentes en
+`index.astro`, y el del dashboard lo fija `SECTION_KEYS`. Un `order` en la base sería un tercer
+lugar donde el orden puede desincronizarse.
 
 `landing_sections.key` — enum cerrado, derivado de `copy.md`:
 
@@ -382,8 +394,26 @@ export const collections = {
 } as const;
 ```
 
-> **`import.meta.env` con fallback a `process.env`:** durante `astro build` las vars vienen de
-> `import.meta.env`; en scripts Node standalone (`scripts/seed.ts`) vienen de `process.env`.
+> **CORRECCIÓN (verificada en Tanda 2): usar SOLO `process.env` en código de servidor.**
+> El patrón `import.meta.env.X ?? process.env.X` **lanza `TypeError`** en un script Node plano,
+> porque ahí `import.meta.env` es `undefined` y se lee `.X` sobre undefined. Además Vite solo
+> reescribe accesos estáticos, nunca dinámicos.
+>
+> `process.env` cubre los tres contextos: el build (gracias a `process.loadEnvFile` en
+> `astro.config.mjs`), los scripts (`node --env-file=.env`) y Vercel (env vars reales).
+> Centralizado en `src/lib/env.ts` con `requireEnv` / `optionalEnv` / `boolEnv` / `intEnv`.
+>
+> **La conexión debe ser perezosa (`getDb()`), no un `export const db` de nivel superior.**
+> Un `throw` al importar el módulo impediría que el fallback a contenido semilla del
+> repositorio llegara a ejecutarse.
+
+> **Node ESM exige extensiones explícitas.** Los módulos de `src/lib` se importan también desde
+> `scripts/` ejecutados con `node` directamente, así que sus especificadores llevan `.ts`
+> (`from './env.ts'`) y `tsconfig.json` necesita `allowImportingTsExtensions` + `noEmit`.
+> Vite resuelve ambas formas; Node solo la explícita.
+
+> **Node 26 ejecuta TypeScript sin flags.** Sobra `--experimental-strip-types` en los scripts:
+> basta `node --env-file=.env scripts/seed.ts`.
 
 ### 2.2 `src/lib/content/schemas.ts` — Zod como única fuente de verdad
 
@@ -483,8 +513,15 @@ export const seoSchema = z.object({
 });
 
 export const videosSchema = z.object({
-  eyebrow: z.string().max(60).optional(),
-  urls: z.array(z.string().url()).max(12),
+  eyebrow: z.string().min(1).max(60),
+  intro: z.string().max(300),
+  // Cada video lleva título y thumbnail propios: el patrón facade (3.3) necesita
+  // un texto accesible y una imagen local, no solo la URL.
+  items: z.array(z.object({
+    url: z.url().max(300),          // Zod 4: `z.url()`, NO el deprecado `z.string().url()`
+    titulo: z.string().min(3).max(120),
+    thumbnail: z.string().max(300).default(''),
+  })).max(12),
 });
 
 export const SECTION_SCHEMAS = {
@@ -568,10 +605,11 @@ Reglas de implementación:
 
 `ensure-indexes.ts`:
 ```
-landing_sections: { key: 1 } unique
-user:             { email: 1 } unique   // Better Auth lo crea, pero lo forzamos idempotente
-session:          { token: 1 } unique, { expiresAt: 1 } TTL
+user:     { email: 1 } unique
+session:  { token: 1 } unique, { expiresAt: 1 } TTL (expireAfterSeconds: 0)
+account:  { userId: 1 }
 ```
+`landing_sections` **no necesita índice**: su clave es el `_id` (ver 0.3.1).
 
 `seed.ts`: itera `SECTION_KEYS`, hace `updateOne({key}, {$setOnInsert: {...}}, {upsert:true})`.
 **`$setOnInsert`, no `$set`** — correr el seed dos veces no debe pisar ediciones del cliente.
@@ -583,8 +621,8 @@ session:          { token: 1 } unique, { expiresAt: 1 } TTL
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "db:indexes": "node --env-file=.env --experimental-strip-types scripts/ensure-indexes.ts",
-    "db:seed": "node --env-file=.env --experimental-strip-types scripts/seed.ts"
+    "db:indexes": "node --env-file=.env scripts/ensure-indexes.ts",
+    "db:seed": "node --env-file=.env scripts/seed.ts"
   }
 }
 ```
@@ -1337,6 +1375,9 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 11 | `astro.config.mjs` no lee `.env` | `site` cae en localhost sin avisar -> canonical/OG/sitemap rotos | `process.loadEnvFile('.env')` + `throw` si falta `PUBLIC_SITE_URL` en Vercel. |
 | 12 | Clase de Tailwind interpolada (`bg-${x}`) | La utilidad no se genera; el elemento queda sin color | Clases completas como string literal + `class:list`. |
 | 13 | `path-to-regexp` (ReDoS, high) vía `@astrojs/vercel` -> `@vercel/routing-utils` | Nulo en runtime: solo parsea config de rutas en build, no recibe input de usuario | Aceptado. `audit fix --force` degradaría el adapter de major. Revisar en cada bump del adapter. |
+| 14 | `import.meta.env` en código compartido con `scripts/` | `TypeError` al ejecutar con node | Solo `process.env`, centralizado en `src/lib/env.ts`. |
+| 15 | Conexión a Mongo en el nivel superior del módulo | El `throw` del import anula el fallback a semilla | `getDb()` perezoso + cache en `globalThis`. |
+| 16 | CTA final apuntando a `#agendar` (su propia sección) | Enlace muerto: el visitante no tiene cómo convertir | **PENDIENTE de input del cliente:** WhatsApp o `tel:`. Editable desde el dashboard sin tocar código. |
 
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
 

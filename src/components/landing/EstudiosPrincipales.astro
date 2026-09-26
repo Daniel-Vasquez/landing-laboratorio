@@ -1,0 +1,26 @@
+---
+import type { LandingContent } from '../../lib/content/schemas.ts';
+import Section from './Section.astro';
+import Button from '../ui/Button.astro';
+
+interface Props {
+  data: LandingContent['estudios_principales'];
+}
+const { data } = Astro.props;
+---
+<Section id="estudios" tone="muted" eyebrow={data.eyebrow} title="Los estudios más solicitados">
+  <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>
+
+  <ul class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {data.estudios.map((estudio) => (
+      <li class="rounded-xl border border-border bg-surface p-6">
+        <h3 class="text-lg font-semibold">{estudio.nombre}</h3>
+        <p class="mt-2 text-sm leading-relaxed text-fg-muted">{estudio.descripcion}</p>
+      </li>
+    ))}
+  </ul>
+
+  <div class="mt-10">
+    <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+  </div>
+</Section>

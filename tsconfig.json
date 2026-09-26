@@ -6,6 +6,11 @@
     "jsx": "react-jsx",
     "jsxImportSource": "react",
     "verbatimModuleSyntax": true,
+    // Node ESM exige extensiones explícitas. Los módulos de src/lib se
+    // importan también desde scripts/ ejecutados con node directamente,
+    // así que los especificadores llevan ".ts".
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
