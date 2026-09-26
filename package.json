@@ -12,7 +12,8 @@
     "db:indexes": "node --env-file=.env scripts/ensure-indexes.ts",
     "db:seed": "node --env-file=.env scripts/seed.ts",
     "a11y:contrast": "node scripts/contrast-audit.mjs",
-    "a11y:html": "node scripts/a11y-audit.mjs"
+    "a11y:html": "node scripts/a11y-audit.mjs",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",
@@ -36,5 +37,8 @@
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

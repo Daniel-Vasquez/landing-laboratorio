@@ -17,9 +17,31 @@ export type SectionDoc = {
   updatedBy: { userId: string; name: string; email: string } | null;
 };
 
+/**
+ * `app_meta` guarda singletons de sistema con formas distintas, de ahí el
+ * índice abierto para los accesos genéricos.
+ */
 export type AppMetaDoc = {
   _id: string;
   [key: string]: unknown;
+};
+
+/**
+ * Vista TIPADA de la misma colección `app_meta`, para el documento
+ * `deploy_state`.
+ *
+ * Existe porque el índice `[key: string]: unknown` de `AppMetaDoc` impide usar
+ * `$inc`: el driver deriva los campos incrementables de los que TypeScript ve
+ * como numéricos, y con un índice abierto ese conjunto queda vacío. Tipar el
+ * documento concreto resuelve el operador y además documenta su forma.
+ */
+export type DeployStateDoc = {
+  _id: string;
+  lastTriggeredAt: Date | null;
+  pending: boolean;
+  lastStatus: 'ok' | 'error' | null;
+  lastError: string | null;
+  triggerCount: number;
 };
 
 /**
@@ -89,6 +111,11 @@ export async function getSectionsCollection(): Promise<Collection<SectionDoc>> {
 
 export async function getMetaCollection(): Promise<Collection<AppMetaDoc>> {
   return (await getDb()).collection<AppMetaDoc>('app_meta');
+}
+
+/** Misma colección que `getMetaCollection`, tipada para `deploy_state`. */
+export async function getDeployStateCollection(): Promise<Collection<DeployStateDoc>> {
+  return (await getDb()).collection<DeployStateDoc>('app_meta');
 }
 
 /** Solo para scripts standalone: el proceso no termina si el socket sigue abierto. */

@@ -1,5 +1,5 @@
 import { intEnv, optionalEnv } from './env.ts';
-import { getMetaCollection } from './mongo.ts';
+import { getDeployStateCollection } from './mongo.ts';
 
 /**
  * Disparo del Deploy Hook de Vercel con ventana de enfriamiento.
@@ -50,7 +50,7 @@ function hookUrl(): string | undefined {
  * insertar un documento con un `_id` que ya existe y lanza E11000. Verificado.
  */
 async function ensureState(): Promise<void> {
-  const meta = await getMetaCollection();
+  const meta = await getDeployStateCollection();
   try {
     await meta.updateOne(
       { _id: DEPLOY_STATE_ID },
@@ -105,7 +105,7 @@ export async function triggerDeploy(options: {
 
   try {
     await ensureState();
-    const meta = await getMetaCollection();
+    const meta = await getDeployStateCollection();
     const now = new Date();
     const cutoff = new Date(now.getTime() - cooldownMs());
 
@@ -134,7 +134,7 @@ export async function triggerDeploy(options: {
         { $set: { pending: true } },
         { returnDocument: 'after' },
       );
-      const last = current?.lastTriggeredAt as Date | null | undefined;
+      const last = current?.lastTriggeredAt;
       return {
         ok: true,
         triggered: false,
@@ -183,15 +183,15 @@ export async function getDeployState(): Promise<DeployState> {
 
   try {
     await ensureState();
-    const meta = await getMetaCollection();
+    const meta = await getDeployStateCollection();
     const doc = await meta.findOne({ _id: DEPLOY_STATE_ID });
-    const last = (doc?.lastTriggeredAt as Date | null) ?? null;
+    const last = doc?.lastTriggeredAt ?? null;
 
     return {
       lastTriggeredAt: last ? last.toISOString() : null,
       pending: Boolean(doc?.pending),
-      lastStatus: (doc?.lastStatus as 'ok' | 'error' | null) ?? null,
-      lastError: (doc?.lastError as string | null) ?? null,
+      lastStatus: doc?.lastStatus ?? null,
+      lastError: doc?.lastError ?? null,
       cooldownSeconds: seconds,
       nextEligibleAt: last ? new Date(last.getTime() + cooldownMs()).toISOString() : null,
       enabled,

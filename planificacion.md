@@ -1427,6 +1427,25 @@ Subdominio ya configurado → asignarlo al proyecto, verificar SSL activo, y con
 `PUBLIC_SITE_URL` / `BETTER_AUTH_URL` coinciden **exactamente** (con `https://`, **sin** slash final).
 Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 
+### 10.2.1 Preflight automatizado
+
+`npm run preflight` (o `-- --prod`) verifica lo que un build verde NO garantiza.
+Detecta los 8 fallos de configuración que cuestan más tiempo:
+
+| Detecta | Por qué importa |
+|---|---|
+| Variables obligatorias ausentes | El build muere o cae al semilla |
+| Comillas en los valores | `Invalid URL` sin decir qué variable |
+| `PUBLIC_SITE_URL` ≠ `BETTER_AUTH_URL` | Login en bucle, sin mensaje útil |
+| `http://` en producción | Cookies sin `Secure` |
+| Secreto corto o el de ejemplo | Sesiones falsificables |
+| Prefijo `PUBLIC_` en un secreto | El secreto llega al navegador |
+| `ALLOW_PUBLIC_SIGNUP=true` en prod | Cualquiera edita la web |
+| Hook definido en Preview | Un preview publica producción |
+
+Además comprueba contra Atlas: conexión, índices, que las 11 secciones existan y
+validen, y que haya al menos una cuenta.
+
 ### 10.3 Orden de puesta en marcha
 
 ```
@@ -1490,6 +1509,8 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
 | 28 | **Paleta entregada sin contraste AA en tema Light** | CTA principal a 3.74:1 y links a 3.49:1: ilegibles para baja visión en un sitio de salud | Bajado un paso cada familia (`#0f766e`, `#0369a1`). Auditoría automatizada en `npm run a11y:contrast`. |
 | 29 | Borde de controles a 1.16:1 | Los inputs son casi invisibles (WCAG 1.4.11 pide 3:1) | `--c-border-strong` para inputs y botones con borde. |
+| 31 | **`astro build` NO hace type-check** | Dos errores de tipos en `deploy.ts` vivieron desde la Tanda 7 con el build en verde | `npm run check` es el chequeo real, y hay que leer la línea de errores completa, no recortar la salida. |
+| 32 | Índice `[key: string]: unknown` en un doc con `$inc` | El operador no compila: el driver deriva los campos incrementables de los que TS ve numéricos | Vista tipada de la misma colección (`DeployStateDoc`). |
 | 30 | `"Inter"` en el stack sin servir el archivo | El diseño cambia según las fuentes instaladas en la máquina del visitante | Stack del sistema puro, sin fuente web. |
 | 27 | Proyección sin `_id: 0` | El ObjectId de cada cuenta se publica en el HTML | `projection: { _id: 0, ... }` explícito en `getUsersView`. |
 | 26 | `pending: false` en la ruta de éxito del webhook | Los guardados concurrentes posteriores al claim se quedan sin publicar | La ruta de éxito no toca `pending`; el claim ya lo gestionó. |
