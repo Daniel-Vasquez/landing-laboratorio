@@ -1,0 +1,67 @@
+---
+import '../styles/global.css';
+import ThemeScript from '../components/ui/ThemeScript.astro';
+import Header from '../components/landing/Header.astro';
+import Footer from '../components/landing/Footer.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  keywords?: string[];
+  ogImage?: string;
+}
+
+const { title, description, keywords = [], ogImage = '/og-default.png' } = Astro.props;
+
+// `Astro.site` viene de `site` en astro.config.mjs (PUBLIC_SITE_URL).
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'http://localhost:4321');
+const ogImageUrl = new URL(ogImage, canonical);
+
+// Sufijo de marca aplicado aquí, no en el campo SEO de la base:
+// mantiene `seo.title` dentro del límite de 70 caracteres del SERP.
+const fullTitle = title.includes('Hospital Cristal') ? title : `${title} | Hospital Cristal`;
+---
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <ThemeScript />
+
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {keywords.length > 0 && <meta name="keywords" content={keywords.join(', ')} />}
+    <link rel="canonical" href={canonical.href} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Laboratorio Clínico Hospital Cristal" />
+    <meta property="og:locale" content="es_MX" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:image" content={ogImageUrl.href} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0d9488" />
+    <meta name="generator" content={Astro.generator} />
+  </head>
+
+  <body class="min-h-dvh bg-bg text-fg">
+    <a
+      href="#contenido"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-fg"
+    >
+      Saltar al contenido principal
+    </a>
+
+    <Header />
+
+    <main id="contenido">
+      <slot />
+    </main>
+
+    <Footer />
+  </body>
+</html>

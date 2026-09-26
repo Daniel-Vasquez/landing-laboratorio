@@ -1,0 +1,19 @@
+# build
+dist/
+.vercel/
+.astro/
+
+# deps
+node_modules/
+
+# entorno — NUNCA commitear
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# sistema
+.DS_Store
+*.log
+npm-debug.log*
+.npm/

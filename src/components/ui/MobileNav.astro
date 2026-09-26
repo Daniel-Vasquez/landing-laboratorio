@@ -1,0 +1,119 @@
+---
+import type { NavItem } from '../../lib/nav';
+
+interface Props {
+  items: NavItem[];
+  cta: NavItem;
+}
+
+const { items, cta } = Astro.props;
+
+/**
+ * Drawer de navegación móvil sobre <dialog> nativo + showModal().
+ *
+ * El elemento nativo aporta gratis y mejor de lo que se implementa a mano:
+ *   - focus trap dentro del diálogo
+ *   - cierre con Escape
+ *   - fondo inerte (no se puede tabular ni hacer scroll hacia él)
+ *   - devolución del foco al botón que lo abrió
+ *   - ::backdrop estilizable
+ * Esto reemplaza ~70 líneas de React con useEffect y listeners manuales.
+ */
+---
+<button
+  type="button"
+  data-nav-open
+  aria-label="Abrir menú de navegación"
+  aria-controls="mobile-nav"
+  class="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg md:hidden"
+>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-5" aria-hidden="true">
+    <path d="M3 6h18M3 12h18M3 18h18" />
+  </svg>
+</button>
+
+<dialog
+  id="mobile-nav"
+  aria-label="Navegación"
+  class="ml-auto mr-0 h-dvh max-h-dvh w-[min(20rem,85vw)] max-w-none border-l border-border bg-surface p-0 text-fg backdrop:bg-black/50 md:hidden"
+>
+  <div class="flex h-full flex-col gap-2 p-5">
+    <div class="mb-2 flex items-center justify-between">
+      <span class="text-sm font-semibold text-fg-muted">Menú</span>
+      <button
+        type="button"
+        data-nav-close
+        aria-label="Cerrar menú"
+        class="inline-flex size-10 items-center justify-center rounded-lg border border-border text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="size-5" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <nav class="flex flex-col">
+      {items.map((item) => (
+        <a
+          href={item.href}
+          data-nav-link
+          class="rounded-lg px-3 py-3 text-base font-medium text-fg transition-colors hover:bg-surface-muted"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+
+    <a
+      href={cta.href}
+      data-nav-link
+      class="mt-auto rounded-lg bg-primary px-4 py-3 text-center text-base font-semibold text-primary-fg transition-colors hover:bg-primary-hover"
+    >
+      {cta.label}
+    </a>
+  </div>
+</dialog>
+
+<style>
+  /* showModal() centra por defecto; lo anclamos a la derecha a pantalla completa. */
+  #mobile-nav[open] {
+    margin-block: 0;
+    margin-inline: auto 0;
+  }
+</style>
+
+<script>
+  const dialog = document.getElementById('mobile-nav') as HTMLDialogElement | null;
+  const opener = document.querySelector<HTMLButtonElement>('[data-nav-open]');
+
+  if (dialog && opener) {
+    const setExpanded = (v: boolean) => opener.setAttribute('aria-expanded', String(v));
+    setExpanded(false);
+
+    opener.addEventListener('click', () => {
+      dialog.showModal();
+      setExpanded(true);
+      // showModal() bloquea el scroll del diálogo, no del body.
+      document.body.style.overflow = 'hidden';
+    });
+
+    const close = () => dialog.close();
+    dialog.querySelector('[data-nav-close]')?.addEventListener('click', close);
+
+    // Navegar a un ancla debe cerrar el drawer, o tapa el destino.
+    for (const link of dialog.querySelectorAll('[data-nav-link]')) {
+      link.addEventListener('click', close);
+    }
+
+    // Clic en el ::backdrop: el target es el propio <dialog>, no su contenido.
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) close();
+    });
+
+    // Cubre las tres vías de cierre: botón, backdrop y Escape (nativo).
+    dialog.addEventListener('close', () => {
+      setExpanded(false);
+      document.body.style.overflow = '';
+    });
+  }
+</script>

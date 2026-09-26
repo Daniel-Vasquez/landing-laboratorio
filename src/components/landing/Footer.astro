@@ -1,0 +1,49 @@
+---
+interface Props {
+  /** Tanda 3 pasará estos datos desde la sección `avisos` de MongoDB. */
+  permisoCofepris?: string;
+  avisos?: string[];
+  privacidadHref?: string;
+}
+
+const {
+  permisoCofepris = '253300201A2234',
+  avisos = [
+    'Aviso de privacidad disponible al pie de página.',
+    'Este sitio tiene fines informativos y no sustituye la valoración médica presencial.',
+  ],
+  privacidadHref = '/aviso-de-privacidad',
+} = Astro.props;
+
+const year = new Date().getFullYear();
+---
+<footer class="border-t border-border bg-surface-muted">
+  <div class="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+    <div class="grid gap-8 sm:grid-cols-2">
+      <div>
+        <p class="text-sm font-semibold text-fg">Laboratorio Clínico · Hospital Cristal</p>
+        <address class="mt-2 text-sm not-italic text-fg-muted">
+          Melchor Ocampo 233, Santiago 1ra Secc,<br />
+          Zumpango, Estado de México.
+        </address>
+      </div>
+
+      <div>
+        <p class="text-sm font-semibold text-fg">Avisos y confianza</p>
+        <ul class="mt-2 space-y-1.5 text-sm text-fg-muted">
+          <li>Permiso COFEPRIS: <span class="font-medium text-fg">{permisoCofepris}</span></li>
+          {avisos.map((aviso) => <li>{aviso}</li>)}
+        </ul>
+      </div>
+    </div>
+
+    <div
+      class="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm text-fg-muted sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p>&copy; {year} Hospital Cristal. Todos los derechos reservados.</p>
+      <a href={privacidadHref} class="font-medium text-accent underline-offset-4 hover:underline">
+        Aviso de privacidad
+      </a>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,21 @@
+---
+/**
+ * Script anti-FOUC. DEBE renderizarse dentro de <head>, antes de cualquier CSS.
+ * `is:inline` impide que Astro lo procese o lo mueva a un bundle diferido:
+ * tiene que ejecutarse sincrónicamente antes del primer paint, o el usuario
+ * con tema oscuro ve un destello blanco en cada carga.
+ */
+---
+<script is:inline>
+  (() => {
+    try {
+      // Sin valor almacenado -> Light. No se consulta prefers-color-scheme:
+      // Light es la paleta principal por requerimiento de negocio.
+      if (localStorage.getItem('theme') === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    } catch {
+      /* localStorage bloqueado (modo privado / cookies deshabilitadas) -> Light */
+    }
+  })();
+</script>

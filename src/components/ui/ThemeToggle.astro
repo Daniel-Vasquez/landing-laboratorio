@@ -1,0 +1,60 @@
+---
+/**
+ * Toggle de tema en vanilla JS, NO como island de React.
+ *
+ * Motivo: el runtime de React DOM pesa ~66 KB gzip. Cargarlo en la landing
+ * para un botón de 20 líneas destruye el presupuesto de performance
+ * (medido: 72 KB con React vs ~1 KB sin él). React se reserva para /admin,
+ * donde los formularios sí lo justifican y no hay presupuesto de velocidad.
+ *
+ * Los dos iconos se renderizan siempre y se alternan con la variante `dark:`
+ * de CSS, así el icono correcto aparece en el primer paint, sin esperar JS.
+ */
+---
+<button
+  type="button"
+  data-theme-toggle
+  aria-label="Activar tema oscuro"
+  title="Activar tema oscuro"
+  aria-pressed="false"
+  class="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 dark:hidden" aria-hidden="true">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+  </svg>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden size-5 dark:block" aria-hidden="true">
+    <path d="M12 3a6.36 6.36 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+  </svg>
+</button>
+
+<script>
+  const root = document.documentElement;
+
+  function syncLabels() {
+    const isDark = root.classList.contains('dark');
+    const label = isDark ? 'Activar tema claro' : 'Activar tema oscuro';
+    for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]')) {
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+      btn.setAttribute('aria-pressed', String(isDark));
+    }
+  }
+
+  // El HTML se sirve con los atributos del estado Light. Si ThemeScript ya
+  // aplicó `.dark` antes del paint, hay que corregirlos al cargar el módulo.
+  syncLabels();
+
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]')) {
+    btn.addEventListener('click', () => {
+      const next = root.classList.contains('dark') ? 'light' : 'dark';
+      root.classList.toggle('dark', next === 'dark');
+      try {
+        localStorage.setItem('theme', next);
+      } catch {
+        /* sin persistencia: el cambio aplica solo a esta sesión */
+      }
+      syncLabels();
+    });
+  }
+</script>

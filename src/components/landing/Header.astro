@@ -1,0 +1,48 @@
+---
+import ThemeToggle from '../ui/ThemeToggle.astro';
+import MobileNav from '../ui/MobileNav.astro';
+import { NAV_ITEMS, NAV_CTA } from '../../lib/nav';
+---
+<header
+  class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70"
+>
+  <div class="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 sm:px-6">
+    <a href="/" class="flex items-center gap-2.5 font-semibold text-fg">
+      <span
+        class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-fg"
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5">
+          <path d="M9 2h6M10 2v6.5L5.8 16.4A3 3 0 0 0 8.4 21h7.2a3 3 0 0 0 2.6-4.6L14 8.5V2" />
+          <path d="M7.5 15h9" />
+        </svg>
+      </span>
+      <span class="leading-tight">
+        <span class="block text-sm">Laboratorio Clínico</span>
+        <span class="block text-xs font-normal text-fg-muted">Hospital Cristal</span>
+      </span>
+    </a>
+
+    <nav aria-label="Navegación principal" class="ml-auto hidden items-center gap-1 md:flex">
+      {NAV_ITEMS.map((item) => (
+        <a
+          href={item.href}
+          class="rounded-md px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="ml-auto flex items-center gap-2 md:ml-0">
+      <ThemeToggle />
+      <a
+        href={NAV_CTA.href}
+        class="hidden rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover md:inline-flex"
+      >
+        {NAV_CTA.label}
+      </a>
+      <MobileNav items={NAV_ITEMS} cta={NAV_CTA} />
+    </div>
+  </div>
+</header>
