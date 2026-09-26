@@ -1,16 +1,26 @@
 import { useEffect, useId, useMemo, useState, type SubmitEvent } from 'react';
 import { actions, isActionError, isInputError } from 'astro:actions';
 import type { SectionKey } from '../../lib/content/schemas';
+import type { DeployResult } from '../../lib/deploy';
 import { FIELD_MAP, type Field } from './fieldMap';
 import { deepClone, getPath, setPath } from './paths';
 import RepeaterField from './RepeaterField';
 import { CharCounter, FieldShell, inputClass } from './fields';
 
-type Status =
-  | { state: 'idle' }
-  | { state: 'saving' }
-  | { state: 'saved'; at: string }
-  | { state: 'error'; message: string };
+type Status = { state: 'idle' } | { state: 'saving' } | { state: 'error'; message: string };
+
+type Toast = {
+  tone: 'success' | 'warn' | 'error';
+  message: string;
+  /** Cambia en cada aviso para reiniciar el temporizador de autocierre. */
+  id: number;
+};
+
+/** Cuánto permanece visible el aviso de éxito antes de desaparecer. */
+const TOAST_MS = 6000;
+
+/** Lo que devuelve `triggerDeploy` a través de la action. */
+type DeployOutcome = DeployResult;
 
 interface Props {
   sectionKey: SectionKey;
@@ -18,11 +28,20 @@ interface Props {
 }
 
 export default function SectionEditor({ sectionKey, initialData }: Props) {
-  // Copia profunda: el objeto que llega del servidor no debe mutarse, para
-  // poder comparar contra él y saber si hay cambios sin guardar.
-  const pristine = useMemo(() => deepClone(initialData), [initialData]);
+  /**
+   * `pristine` es la última versión CONFIRMADA por el servidor, y es estado,
+   * no un `useMemo` sobre `initialData`.
+   *
+   * Que fuera un memo causaba el diálogo nativo "Reload site? Changes you made
+   * may not be saved": tras guardar con éxito, `pristine` seguía siendo el dato
+   * original, así que `isDirty` seguía en `true`, el listener `beforeunload`
+   * seguía montado, y la recarga que se hacía a continuación lo disparaba.
+   * Los datos ya estaban guardados; la alerta era una falsa alarma.
+   */
+  const [pristine, setPristine] = useState<unknown>(() => deepClone(initialData));
   const [data, setData] = useState<unknown>(() => deepClone(initialData));
   const [status, setStatus] = useState<Status>({ state: 'idle' });
+  const [toast, setToast] = useState<Toast | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const baseId = useId();
 
@@ -31,6 +50,14 @@ export default function SectionEditor({ sectionKey, initialData }: Props) {
     () => JSON.stringify(data) !== JSON.stringify(pristine),
     [data, pristine],
   );
+
+  // El aviso de éxito se cierra solo; los de error se quedan hasta el siguiente
+  // intento, porque exigen una acción del usuario.
+  useEffect(() => {
+    if (!toast || toast.tone === 'error') return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Avisar antes de perder cambios al cerrar la pestaña o navegar fuera.
   useEffect(() => {
@@ -48,43 +75,97 @@ export default function SectionEditor({ sectionKey, initialData }: Props) {
       delete next[path];
       return next;
     });
-    // Un cambio invalida el "guardado" anterior: el estado ya no lo refleja.
-    setStatus((current) => (current.state === 'saved' ? { state: 'idle' } : current));
+    // Editar tras un guardado deja obsoleto el aviso de éxito.
+    setToast((current) => (current?.tone === 'success' ? null : current));
+  }
+
+  /**
+   * Traduce el resultado del webhook a un mensaje honesto.
+   *
+   * No se anuncia "la landing se está actualizando" salvo que el redespliegue
+   * se haya disparado de verdad: con el hook sin configurar, dentro de la
+   * ventana de enfriamiento, o si el hook falló, esa frase sería falsa y el
+   * editor esperaría un cambio en la web pública que no va a llegar.
+   */
+  function describeDeploy(deploy: DeployOutcome): Toast {
+    const id = Date.now();
+    if (!deploy.ok) {
+      return {
+        id,
+        tone: 'error',
+        message:
+          'Cambios guardados correctamente, pero no se pudo iniciar el redespliegue. ' +
+          'La web pública sigue mostrando la versión anterior: usa "Publicar ahora" en el panel.',
+      };
+    }
+    if (deploy.triggered) {
+      return {
+        id,
+        tone: 'success',
+        message: 'Cambios guardados correctamente. La landing se está actualizando.',
+      };
+    }
+    if (deploy.reason === 'cooldown') {
+      return {
+        id,
+        tone: 'success',
+        message:
+          'Cambios guardados correctamente. Se publicarán junto con los anteriores en unos segundos.',
+      };
+    }
+    return {
+      id,
+      tone: 'warn',
+      message:
+        'Cambios guardados correctamente, pero el redespliegue automático está desactivado, ' +
+        'así que la web pública no se actualizará todavía.',
+    };
   }
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    // Impide el envío nativo del formulario: la petición va por la action.
     event.preventDefault();
+
     setStatus({ state: 'saving' });
     setFieldErrors({});
+    setToast(null);
+
+    // Instantánea de lo enviado: `data` puede cambiar mientras la petición
+    // vuela, y `pristine` debe reflejar exactamente lo que el servidor aceptó.
+    const submitted = deepClone(data);
 
     const { data: result, error } = await actions.content.updateSection({
       key: sectionKey,
-      data,
+      data: submitted,
     });
 
     if (error) {
-      // isInputError -> falló el esquema del INPUT de la action (key/data).
-      if (isInputError(error)) {
-        setStatus({
-          state: 'error',
-          message: 'Los datos enviados no tienen el formato esperado.',
-        });
-        return;
-      }
-
       if (isActionError(error) && error.code === 'UNAUTHORIZED') {
-        // La sesión murió: recargar lleva al login preservando el destino.
+        // La sesión murió. Único caso en que se navega: hay que reautenticar.
         window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
         return;
       }
 
-      setStatus({ state: 'error', message: error.message });
+      // isInputError -> falló el esquema del INPUT de la action (key/data).
+      const message = isInputError(error)
+        ? 'Los datos enviados no tienen el formato esperado.'
+        : error.message;
+
+      setStatus({ state: 'error', message });
+      setToast({ id: Date.now(), tone: 'error', message });
       return;
     }
 
-    setStatus({ state: 'saved', at: result.savedAt });
-    // Recargar para que el pristine y la metadata del servidor se actualicen.
-    window.location.reload();
+    /**
+     * Sin `window.location.reload()`.
+     *
+     * Se adopta lo que el servidor confirmó como nueva línea base: `isDirty`
+     * pasa a false, el guard de `beforeunload` se desmonta, y los campos ya
+     * muestran los valores guardados porque `data` nunca se descartó.
+     */
+    setPristine(submitted);
+    setStatus({ state: 'idle' });
+    setToast(describeDeploy(result.deploy));
   }
 
   function renderField(field: Field, absolutePath = field.path): React.ReactNode {
@@ -223,13 +304,48 @@ export default function SectionEditor({ sectionKey, initialData }: Props) {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      {status.state === 'error' && (
-        <p
-          role="alert"
-          className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300"
+      {toast && (
+        <div
+          key={toast.id}
+          /*
+           * `status` + `polite` para el éxito: es información de progreso y no
+           * debe interrumpir lo que el lector de pantalla esté leyendo.
+           * `alert` + `assertive` para el error: exige atención inmediata.
+           */
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+          aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
+          className={[
+            'mb-6 flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm',
+            toast.tone === 'success'
+              ? 'border-emerald-600/40 bg-emerald-600/10 text-emerald-900 dark:text-emerald-200'
+              : toast.tone === 'warn'
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                : 'border-red-500/40 bg-red-500/10 text-red-800 dark:text-red-300',
+          ].join(' ')}
         >
-          {status.message}
-        </p>
+          <span className="mt-0.5 shrink-0" aria-hidden="true">
+            {toast.tone === 'success' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+                <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01" />
+              </svg>
+            )}
+          </span>
+          <p className="min-w-0 flex-1">{toast.message}</p>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            aria-label="Cerrar aviso"
+            className="-my-1 -mr-1 shrink-0 rounded p-1 transition-opacity hover:opacity-70"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="size-4" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       )}
 
       <div className="space-y-6 rounded-xl border border-border bg-surface p-5 sm:p-6">
@@ -240,11 +356,18 @@ export default function SectionEditor({ sectionKey, initialData }: Props) {
           pantalla y el editor no sabría si hay cambios pendientes. */}
       <div className="sticky bottom-0 mt-4 flex items-center gap-3 rounded-xl border border-border bg-surface/95 p-4 backdrop-blur">
         <p aria-live="polite" className="min-w-0 flex-1 text-sm text-fg-muted">
-          {saving
-            ? 'Guardando…'
-            : isDirty
-              ? 'Tienes cambios sin guardar.'
-              : 'Todos los cambios están guardados.'}
+          {saving ? (
+            <span className="inline-flex items-center gap-2">
+              <svg viewBox="0 0 24 24" className="size-4 animate-spin" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round" />
+              </svg>
+              Guardando…
+            </span>
+          ) : isDirty ? (
+            'Tienes cambios sin guardar.'
+          ) : (
+            'Todos los cambios están guardados.'
+          )}
         </p>
         <a
           href="/admin"

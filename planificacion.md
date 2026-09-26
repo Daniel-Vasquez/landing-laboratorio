@@ -1086,7 +1086,26 @@ Componentes:
 - Contador de caracteres visible cuando hay `max` (ej. `seo.description` 50–160).
 - Botón **Guardar** deshabilitado si `!isDirty`. `beforeunload` si hay cambios sin guardar.
 - Al guardar: `actions.content.updateSection({ key, data })`.
-  - Éxito → toast "Guardado · redeploy iniciado", reset de `isDirty`, refresco de `DeployStatus`.
+  - Éxito → se adopta lo enviado como nueva línea base (`setPristine`), `isDirty` pasa a false
+    y aparece un toast. **NUNCA `window.location.reload()`** — ver el aviso de abajo.
+
+> **Trampa verificada: `reload()` tras guardar dispara el diálogo nativo del navegador**
+> ("Reload site? Changes you made may not be saved").
+>
+> Si `pristine` es un `useMemo` sobre `initialData`, tras un guardado exitoso sigue siendo el
+> dato original, así que `isDirty` sigue en `true` y el listener `beforeunload` sigue montado.
+> La recarga lo dispara y el usuario ve una alerta de pérdida de datos… cuando los datos ya
+> estaban guardados. Además obliga a recargar a mano para ver los cambios.
+>
+> Solución: `pristine` es **estado**, y al confirmar el servidor se asigna la instantánea de lo
+> enviado. `isDirty` pasa a false, el guard se desmonta, y los campos ya muestran los valores
+> guardados porque `data` nunca se descartó. Sin recargas.
+
+> **El mensaje del toast debe reflejar el resultado real del webhook.** "La landing se está
+> actualizando" solo es cierto si el redespliegue se disparó. Con el hook sin configurar, dentro
+> del enfriamiento, o si el hook falló, esa frase haría esperar al editor un cambio en la web
+> pública que no va a llegar. `describeDeploy()` mapea los cuatro casos de `DeployResult` a
+> mensajes distintos.
   - `isInputError(error)` → pintar errores por campo.
   - `ActionError` `BAD_REQUEST` → banner con el mensaje agregado de Zod.
   - `UNAUTHORIZED` → redirect a `/login`.
