@@ -13,7 +13,8 @@
     "db:seed": "node --env-file=.env scripts/seed.ts",
     "a11y:contrast": "node scripts/contrast-audit.mjs",
     "a11y:html": "node scripts/a11y-audit.mjs",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "db:seed-images": "node --env-file=.env scripts/seed-images.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",

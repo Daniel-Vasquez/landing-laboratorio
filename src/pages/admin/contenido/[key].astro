@@ -5,6 +5,10 @@ import SectionEditor from '../../../components/admin/SectionEditor.tsx';
 import { getSection } from '../../../lib/content/repository.ts';
 import { isMongoConfigured } from '../../../lib/mongo.ts';
 import { SECTION_LABELS, isSectionKey } from '../../../lib/content/schemas.ts';
+import { slotsForSection } from '../../../lib/images/slots.ts';
+import { getLandingImages } from '../../../lib/images/repository.ts';
+import { cloudinaryUrl } from '../../../lib/images/url.ts';
+import ImageSlotField from '../../../components/admin/ImageSlotField.tsx';
 
 export const prerender = false;
 
@@ -31,6 +35,17 @@ if (dbReachable) {
 
 const data = await getSection(key);
 const label = SECTION_LABELS[key];
+
+/**
+ * Las imágenes NO se añaden al FIELD_MAP de la Tanda 6.
+ *
+ * Ese mapa describe campos del documento de la sección, que se guardan todos
+ * juntos con "Guardar cambios". Las imágenes viven en otra colección y tienen
+ * otro flujo: se suben de inmediato, una a una. Mezclarlos obligaría al
+ * formulario de texto a saber de archivos.
+ */
+const slots = slotsForSection(key);
+const images = slots.length > 0 ? await getLandingImages() : {};
 ---
 <AdminLayout title={label} description="Editar contenido de la sección" user={user}>
   {!dbReachable && (
@@ -38,4 +53,33 @@ const label = SECTION_LABELS[key];
   )}
 
   <SectionEditor client:load sectionKey={key} initialData={data} />
+
+  {
+    slots.length > 0 && (
+      <section class="mt-8" aria-labelledby="imagenes">
+        <h2 id="imagenes" class="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+          Imágenes de esta sección
+        </h2>
+        <p class="mt-1.5 text-sm text-fg-muted">
+          Solo se pueden reemplazar. El número de imágenes y su posición forman parte del diseño
+          y no se editan desde aquí.
+        </p>
+
+        <div class="mt-4 space-y-4">
+          {slots.map((slot) => {
+            const image = images[slot.id];
+            return (
+              <ImageSlotField
+                client:load
+                slot={slot}
+                currentUrl={image ? cloudinaryUrl(image, 400) : null}
+                currentAlt={image?.alt ?? ''}
+                decorative={slot.altDefault === null}
+              />
+            );
+          })}
+        </div>
+      </section>
+    )
+  }
 </AdminLayout>

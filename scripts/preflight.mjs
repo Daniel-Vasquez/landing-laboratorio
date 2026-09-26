@@ -98,6 +98,30 @@ function noPublicSecrets() {
   else ok('Ningún secreto lleva prefijo PUBLIC_ (no llegan al navegador).');
 }
 
+function cloudinary() {
+  const required = [
+    'CLOUDINARY_CLOUD_NAME',
+    'CLOUDINARY_API_KEY',
+    'CLOUDINARY_API_SECRET',
+    'CLOUDINARY_FOLDER',
+  ];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    err(
+      `Faltan variables de Cloudinary: ${missing.join(', ')}. ` +
+        'El BUILD las necesita para construir las URLs de las imágenes, no solo el panel.',
+    );
+    return;
+  }
+  if (process.env.CLOUDINARY_FOLDER !== 'landing-laboratorio') {
+    warn(
+      `CLOUDINARY_FOLDER es "${process.env.CLOUDINARY_FOLDER}"; las ranuras esperan ` +
+        '"landing-laboratorio".',
+    );
+  }
+  ok('Las 4 variables de Cloudinary están definidas.');
+}
+
 function signupGate() {
   const open = process.env.ALLOW_PUBLIC_SIGNUP === 'true';
   const invite = process.env.SIGNUP_INVITE_CODE;
@@ -196,6 +220,21 @@ async function database() {
   if (!missing.length && !invalid.length)
     ok(`Las ${schemas.SECTION_KEYS.length} secciones existen y validan.`);
 
+  // Imágenes
+  try {
+    const slots = await import('../src/lib/images/slots.ts');
+    const rows = await db.collection('landing_images').find({}, { projection: { _id: 1 } }).toArray();
+    const have = new Set(rows.map((r) => r._id));
+    const without = slots.IMAGE_SLOTS.filter((s) => !have.has(s.id)).map((s) => s.id);
+    if (without.length) {
+      warn(`Ranuras de imagen sin asset (renderizarán placeholder): ${without.join(', ')}`);
+    } else {
+      ok(`Las ${slots.IMAGE_SLOTS.length} ranuras de imagen tienen asset.`);
+    }
+  } catch (e) {
+    warn(`No se pudieron comprobar las ranuras de imagen: ${e.message}`);
+  }
+
   // Cuentas
   const users = await db.collection('user').countDocuments();
   if (users === 0)
@@ -214,6 +253,7 @@ urlConsistency();
 secretStrength();
 noPublicSecrets();
 signupGate();
+cloudinary();
 deployHook();
 await database();
 

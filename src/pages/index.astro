@@ -18,11 +18,13 @@ import Videos from '../components/landing/Videos.astro';
 import Faq from '../components/landing/Faq.astro';
 import CtaFinal from '../components/landing/CtaFinal.astro';
 import { getLandingContent } from '../lib/content/repository.ts';
+import { getLandingImages } from '../lib/images/repository.ts';
 import { buildJsonLd } from '../lib/seo.ts';
 
 export const prerender = true;
 
-const content = await getLandingContent();
+// Dos queries en total: una para el contenido, una para las imágenes.
+const [content, images] = await Promise.all([getLandingContent(), getLandingImages()]);
 const siteUrl = (Astro.site ?? new URL('http://localhost:4321')).href;
 const jsonLd = buildJsonLd(content, siteUrl);
 ---
@@ -32,13 +34,13 @@ const jsonLd = buildJsonLd(content, siteUrl);
   address={content.hero.address}
   jsonLd={jsonLd}
 >
-  <Hero data={content.hero} />
-  <EstudiosPrincipales data={content.estudios_principales} />
-  <PorQueEstudios data={content.por_que_estudios} />
+  <Hero data={content.hero} images={images} />
+  <EstudiosPrincipales data={content.estudios_principales} images={images} />
+  <PorQueEstudios data={content.por_que_estudios} images={images} />
   <EstudiosAdicionales data={content.estudios_adicionales} />
   <PorQueHospital data={content.por_que_hospital} />
   <Testimonios data={content.testimonios} />
   <Videos data={content.videos} />
-  <Faq data={content.faq} />
-  <CtaFinal data={content.cta_final} address={content.hero.address} />
+  <Faq data={content.faq} images={images} />
+  <CtaFinal data={content.cta_final} address={content.hero.address} images={images} />
 </LandingLayout>

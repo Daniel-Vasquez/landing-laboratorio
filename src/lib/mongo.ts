@@ -1,6 +1,7 @@
 import { MongoClient, type Collection, type Db } from 'mongodb';
 import { optionalEnv, requireEnv } from './env.ts';
 import type { SectionKey } from './content/schemas.ts';
+import type { ImageDoc } from './images/types.ts';
 
 /** Documento de una sección de la landing. `_id` ES la clave de sección. */
 export type SectionDoc = {
@@ -111,6 +112,10 @@ export async function getSectionsCollection(): Promise<Collection<SectionDoc>> {
 
 export async function getMetaCollection(): Promise<Collection<AppMetaDoc>> {
   return (await getDb()).collection<AppMetaDoc>('app_meta');
+}
+
+export async function getImagesCollection(): Promise<Collection<ImageDoc>> {
+  return (await getDb()).collection<ImageDoc>('landing_images');
 }
 
 /** Misma colección que `getMetaCollection`, tipada para `deploy_state`. */

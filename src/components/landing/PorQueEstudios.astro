@@ -1,15 +1,24 @@
 ---
 import type { LandingContent } from '../../lib/content/schemas.ts';
+import type { LandingImages } from '../../lib/images/repository.ts';
+import { getSlot } from '../../lib/images/slots.ts';
 import Section from './Section.astro';
 import Button from '../ui/Button.astro';
+import AsideFigure from './AsideFigure.astro';
 
 interface Props {
   data: LandingContent['por_que_estudios'];
+  images: LandingImages;
 }
-const { data } = Astro.props;
+const { data, images } = Astro.props;
+const slot = getSlot('deteccion-oportuna')!;
 ---
 <Section id="por-que" eyebrow="Detección oportuna" title={data.eyebrow}>
-  <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>
+  <div class="mt-5 grid items-start gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
+    <p class="text-fg-muted">{data.intro}</p>
+    <!-- En móvil la imagen queda tras el texto introductorio, antes de los datos. -->
+    <AsideFigure imageSlot={slot} image={images[slot.id]} />
+  </div>
 
   <p class="mt-10 text-sm font-semibold uppercase tracking-wide text-fg">{data.datosLabel}</p>
 

@@ -10,6 +10,9 @@ import {
 } from '../lib/content/schemas.ts';
 import { setSection } from '../lib/content/repository.ts';
 import { getDeployState, triggerDeploy } from '../lib/deploy.ts';
+import { getSlot, isSlotId } from '../lib/images/slots.ts';
+import { setSlotImage } from '../lib/images/repository.ts';
+import { MAX_BYTES, sniffImageType, uploadToSlot } from '../lib/images/cloudinary.ts';
 
 /**
  * Server actions del dashboard.
@@ -80,6 +83,94 @@ export const server = {
         // El redespliegue es reintentable desde el botón "Publicar ahora".
         const deploy = await triggerDeploy({
           reason: `content:${key}`,
+          actor: { name: user.name },
+        });
+
+        return { ok: true as const, savedAt: new Date().toISOString(), deploy };
+      },
+    }),
+  },
+
+  images: {
+    /**
+     * REEMPLAZA la imagen de una ranura existente. No existe una action para
+     * crear ranuras: el registro vive en código, así que un `slotId` que no
+     * esté ahí se rechaza aquí mismo.
+     */
+    replace: defineAction({
+      // 'form', no 'json': recibe un File dentro de FormData.
+      accept: 'form',
+      input: z.object({
+        slotId: z.string(),
+        // `.nullish()`: un campo de texto vacío en un envío multipart llega
+        // como `null`, y uno ausente como `undefined`. Sin aceptar ambos, el
+        // fallo sería un error de esquema sin mensaje útil en lugar del aviso
+        // propio de más abajo.
+        alt: z.string().max(300).nullish(),
+        file: z.instanceof(File),
+      }),
+      handler: async ({ slotId, alt, file }, context) => {
+        const user = requireUser(context.locals);
+
+        if (!isSlotId(slotId)) {
+          throw new ActionError({
+            code: 'BAD_REQUEST',
+            message: `Ranura desconocida: ${slotId}. Las ranuras se definen en código.`,
+          });
+        }
+        const slot = getSlot(slotId)!;
+
+        if (file.size === 0) {
+          throw new ActionError({ code: 'BAD_REQUEST', message: 'El archivo está vacío.' });
+        }
+        if (file.size > MAX_BYTES) {
+          throw new ActionError({
+            code: 'BAD_REQUEST',
+            message: `La imagen pesa ${(file.size / 1024 / 1024).toFixed(1)} MB. El máximo son ${MAX_BYTES / 1024 / 1024} MB.`,
+          });
+        }
+
+        const bytes = new Uint8Array(await file.arrayBuffer());
+
+        // Validación por CONTENIDO. La extensión y el Content-Type los controla
+        // el cliente: un SVG con <script> renombrado a .png pasaría cualquier
+        // comprobación basada en el nombre.
+        const detected = sniffImageType(bytes);
+        if (!detected) {
+          throw new ActionError({
+            code: 'BAD_REQUEST',
+            message: 'El archivo no es una imagen PNG, JPG o WebP válida.',
+          });
+        }
+
+        // Una ranura decorativa (fondo) lleva alt vacío a propósito.
+        const requiresAlt = slot.altDefault !== null;
+        const cleanAlt = (alt ?? '').trim();
+        if (requiresAlt && cleanAlt.length < 5) {
+          throw new ActionError({
+            code: 'BAD_REQUEST',
+            message: 'Describe la imagen en el texto alternativo (mínimo 5 caracteres).',
+          });
+        }
+
+        let uploaded;
+        try {
+          uploaded = await uploadToSlot(slot.publicId, bytes, file.name);
+        } catch (error) {
+          throw new ActionError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `No se pudo subir la imagen: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+
+        await setSlotImage(slot, uploaded, requiresAlt ? cleanAlt : '', {
+          userId: user.id,
+          name: user.name,
+          email: user.email,
+        });
+
+        const deploy = await triggerDeploy({
+          reason: `image:${slot.id}`,
           actor: { name: user.name },
         });
 

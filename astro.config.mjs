@@ -89,6 +89,23 @@ export default defineConfig({
     maxDuration: 15,
   }),
 
+  security: {
+    /**
+     * El default de Astro son 1 MB, por debajo del peso de una foto normal: el
+     * administrador recibiría un `413 Request body exceeds 1048576 bytes` del
+     * framework antes de que corriera ninguna validación propia.
+     *
+     * Se sube a 6 MB, justo por encima del límite de 5 MB que aplica la action
+     * `images.replace`. Así el rechazo siempre llega con un mensaje útil
+     * ("La imagen pesa X MB, el máximo son 5") en lugar de un error crudo.
+     *
+     * Sigue por debajo del tope de 4.5 MB de body que imponen las funciones
+     * serverless de Vercel para el contenido ya decodificado, así que el límite
+     * efectivo en producción lo marca la action, no la plataforma.
+     */
+    actionBodySizeLimit: 6 * 1024 * 1024,
+  },
+
   integrations: [
     react(),
     sitemap({

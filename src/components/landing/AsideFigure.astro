@@ -1,0 +1,25 @@
+---
+import type { ImageSlot } from '../../lib/images/slots.ts';
+import type { ImageDoc } from '../../lib/images/types.ts';
+import SlotImage from './SlotImage.astro';
+
+interface Props {
+  /** `slot` es nombre reservado en Astro. */
+  imageSlot: ImageSlot;
+  image: ImageDoc | undefined;
+  priority?: boolean;
+}
+
+const { imageSlot: slot, image, priority = false } = Astro.props;
+---
+<div
+  class="overflow-hidden rounded-2xl border border-border bg-surface-muted"
+  style={`aspect-ratio: ${slot.aspect}`}
+>
+  <SlotImage
+    imageSlot={slot}
+    image={image}
+    priority={priority}
+    sizes={`(min-width: 1024px) ${slot.displayWidth}px, 100vw`}
+  />
+</div>

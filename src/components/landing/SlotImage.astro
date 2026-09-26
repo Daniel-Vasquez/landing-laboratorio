@@ -1,0 +1,52 @@
+---
+import type { ImageSlot } from '../../lib/images/slots.ts';
+import type { ImageDoc } from '../../lib/images/types.ts';
+import { cloudinarySrcSet, cloudinaryUrl, slotDimensions } from '../../lib/images/url.ts';
+
+interface Props {
+  /**
+   * NO se puede llamar `slot`: Astro reserva ese nombre de prop para los slots
+   * nombrados (`slot="footer"`), así que pasarlo como atributo no llega a
+   * `Astro.props`.
+   */
+  imageSlot: ImageSlot;
+  image: ImageDoc | undefined;
+  /** Solo el hero: es el LCP de la página. */
+  priority?: boolean;
+  /** Valor del atributo `sizes`. Por defecto, el ancho del slot. */
+  sizes?: string;
+  class?: string;
+}
+
+const { imageSlot: slot, image, priority = false, sizes, class: extra = '' } = Astro.props;
+const { width, height } = slotDimensions(slot);
+---
+{
+  image ? (
+    <img
+      src={cloudinaryUrl(image, slot.displayWidth)}
+      srcset={cloudinarySrcSet(image, slot)}
+      sizes={sizes ?? `${slot.displayWidth}px`}
+      alt={image.alt}
+      width={width}
+      height={height}
+      /* El hero es el LCP: debe cargarse de inmediato y con prioridad alta.
+         Todas las demás en diferido, o compiten con él por ancho de banda. */
+      loading={priority ? 'eager' : 'lazy'}
+      fetchpriority={priority ? 'high' : 'auto'}
+      decoding={priority ? 'sync' : 'async'}
+      class:list={['size-full object-cover', extra]}
+    />
+  ) : (
+    /* Placeholder con las MISMAS dimensiones que la imagen real: sustituirlo
+       después no provoca reflow (CLS = 0). */
+    <div
+      class:list={[
+        'size-full bg-gradient-to-br from-primary/15 via-surface-muted to-accent/15',
+        extra,
+      ]}
+      style={`aspect-ratio: ${slot.aspect}`}
+      aria-hidden="true"
+    />
+  )
+}

@@ -1,29 +1,43 @@
 ---
 import type { LandingContent } from '../../lib/content/schemas.ts';
+import type { LandingImages } from '../../lib/images/repository.ts';
+import { getSlot } from '../../lib/images/slots.ts';
 import Button from '../ui/Button.astro';
+import AsideFigure from './AsideFigure.astro';
 
 interface Props {
   data: LandingContent['cta_final'];
   address: string;
+  images: LandingImages;
 }
-const { data, address } = Astro.props;
+const { data, address, images } = Astro.props;
+const slot = getSlot('cta-final')!;
 ---
 <section id="agendar" class="scroll-mt-16 bg-bg">
   <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:py-24">
     <div class="rounded-2xl border border-border bg-surface p-8 sm:p-12">
-      <h2 class="max-w-2xl text-3xl font-bold sm:text-4xl">{data.headline}</h2>
-      <p class="mt-4 max-w-2xl text-fg-muted">{data.body}</p>
+      <div class="grid items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">
+        <div>
+          <h2 class="text-3xl font-bold sm:text-4xl">{data.headline}</h2>
+          <p class="mt-4 text-fg-muted">{data.body}</p>
 
-      <p class="mt-8 flex items-start gap-2 text-sm text-fg-muted">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true">
-          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-        <span>{address}</span>
-      </p>
+          <p class="mt-8 flex items-start gap-2 text-sm text-fg-muted">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span>{address}</span>
+          </p>
 
-      <div class="mt-8">
-        <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+          <div class="mt-8">
+            <Button href={data.cta.href} size="lg">{data.cta.label}</Button>
+          </div>
+        </div>
+
+        <!-- Imagen tras el CTA en móvil, columna derecha en escritorio. -->
+        <div class="order-last lg:order-none">
+          <AsideFigure imageSlot={slot} image={images[slot.id]} />
+        </div>
       </div>
     </div>
   </div>
