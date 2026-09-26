@@ -1,0 +1,195 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import DbErrorBanner from '../../components/admin/DbErrorBanner.astro';
+import { getUsersView } from '../../lib/users.ts';
+import { formatDateTime, formatRelative } from '../../lib/dates.ts';
+import { SECTION_LABELS } from '../../lib/content/schemas.ts';
+import { signupEnabled, signupInviteCode } from '../../lib/auth.ts';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+const { ok, error, lastChange, accounts } = await getUsersView();
+
+function initials(name: string): string {
+  return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
+}
+---
+<AdminLayout title="Usuarios" description="Cuentas con acceso y último cambio" user={user}>
+  {!ok && error && <DbErrorBanner error={error} />}
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <!-- Último cambio: el dato que pide el requerimiento -->
+    <section class="lg:col-span-2" aria-labelledby="ultimo-cambio">
+      <h2 id="ultimo-cambio" class="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+        Último cambio en la web
+      </h2>
+
+      <div class="mt-3 rounded-xl border border-border bg-surface p-6">
+        {lastChange ? (
+          <>
+            <div class="flex items-start gap-4">
+              <span
+                class="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-fg"
+                aria-hidden="true"
+              >
+                {initials(lastChange.name)}
+              </span>
+              <div class="min-w-0">
+                <p class="text-lg font-semibold text-fg">{lastChange.name}</p>
+                <p class="truncate text-sm text-fg-muted">{lastChange.email}</p>
+              </div>
+            </div>
+
+            <dl class="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-2">
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-fg-muted">Cuándo</dt>
+                <dd class="mt-1 text-sm font-medium text-fg">
+                  {formatRelative(lastChange.at)}
+                </dd>
+                <dd class="text-xs text-fg-muted">{formatDateTime(lastChange.at)}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-fg-muted">
+                  Sección modificada
+                </dt>
+                <dd class="mt-1 text-sm font-medium text-fg">
+                  {SECTION_LABELS[lastChange.sectionKey] ?? lastChange.sectionKey}
+                </dd>
+                <dd class="mt-1">
+                  <a
+                    href={`/admin/contenido/${lastChange.sectionKey}`}
+                    class="text-xs font-medium text-accent underline-offset-4 hover:underline"
+                  >
+                    Ver esta sección
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </>
+        ) : (
+          <div class="py-4 text-center">
+            <p class="text-sm font-medium text-fg">Aún no se han registrado cambios</p>
+            <p class="mx-auto mt-1.5 max-w-sm text-sm text-fg-muted">
+              Cuando alguien guarde una sección desde el panel, aquí aparecerá su nombre.
+            </p>
+            <a
+              href="/admin"
+              class="mt-4 inline-flex rounded-lg border border-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:bg-surface-muted"
+            >
+              Ir al contenido
+            </a>
+          </div>
+        )}
+      </div>
+
+      <p class="mt-3 text-xs text-fg-muted">
+        Se registra únicamente el autor del último cambio, no un historial de modificaciones.
+      </p>
+    </section>
+
+    <!-- Cuentas con acceso -->
+    <section aria-labelledby="cuentas">
+      <h2 id="cuentas" class="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+        Cuentas con acceso
+      </h2>
+
+      <div class="mt-3 overflow-hidden rounded-xl border border-border bg-surface">
+        <p class="border-b border-border px-5 py-4">
+          <span class="text-2xl font-bold tabular-nums text-fg">{accounts.length}</span>
+          <span class="ml-1.5 text-sm text-fg-muted">
+            {accounts.length === 1 ? 'cuenta' : 'cuentas'}
+          </span>
+        </p>
+
+        {accounts.length > 0 ? (
+          <ul class="divide-y divide-border">
+            {accounts.map((account) => (
+              <li class="flex items-start gap-3 px-5 py-3.5">
+                <span
+                  class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-surface-muted text-xs font-bold text-fg-muted"
+                  aria-hidden="true"
+                >
+                  {initials(account.name)}
+                </span>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-fg">{account.name}</span>
+                  <span class="block truncate text-xs text-fg-muted">{account.email}</span>
+                  {account.createdAt && (
+                    <span class="block text-xs text-fg-muted/70">
+                      Desde {formatDateTime(account.createdAt)}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="px-5 py-4 text-sm text-fg-muted">No hay cuentas registradas.</p>
+        )}
+      </div>
+
+      <!-- Estado de las altas: evita dejar el registro abierto por olvido -->
+      <div
+        class:list={[
+          'mt-4 rounded-xl border p-4',
+          signupEnabled
+            ? 'border-amber-500/40 bg-amber-500/10'
+            : 'border-border bg-surface',
+        ]}
+      >
+        <p class="flex items-start gap-2.5 text-sm">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class:list={[
+              'mt-0.5 size-4 shrink-0',
+              signupEnabled ? 'text-amber-600 dark:text-amber-400' : 'text-primary',
+            ]}
+            aria-hidden="true"
+          >
+            {signupEnabled ? (
+              <>
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+              </>
+            ) : (
+              <>
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </>
+            )}
+          </svg>
+          <span>
+            {signupEnabled ? (
+              <>
+                <strong class="font-semibold text-amber-900 dark:text-amber-200">
+                  Registro público abierto.
+                </strong>
+                <span class="mt-1 block text-amber-900/90 dark:text-amber-200/90">
+                  {signupInviteCode
+                    ? 'Se exige código de invitación, pero conviene cerrarlo cuando el equipo ya tenga sus cuentas: '
+                    : 'Cualquier persona con el enlace puede crear una cuenta y editar la web. Ciérralo con '}
+                  <code class="font-mono text-xs">ALLOW_PUBLIC_SIGNUP=false</code>.
+                </span>
+              </>
+            ) : (
+              <>
+                <strong class="font-semibold text-fg">Registro cerrado.</strong>
+                <span class="mt-1 block text-fg-muted">
+                  No se pueden crear cuentas nuevas. Para añadir a alguien, activa
+                  <code class="font-mono text-xs"> ALLOW_PUBLIC_SIGNUP=true</code>, que se registre,
+                  y vuelve a cerrarlo.
+                </span>
+              </>
+            )}
+          </span>
+        </p>
+      </div>
+    </section>
+  </div>
+</AdminLayout>

@@ -1,10 +1,6 @@
 import { boolEnv } from '../env.ts';
-import {
-  getMetaCollection,
-  getSectionsCollection,
-  isMongoConfigured,
-  type SectionDoc,
-} from '../mongo.ts';
+import { getSectionsCollection, isMongoConfigured, type SectionDoc } from '../mongo.ts';
+import { recordChange } from '../audit.ts';
 import { SEED } from './seed.ts';
 import {
   SECTION_KEYS,
@@ -123,12 +119,7 @@ export async function setSection<K extends SectionKey>(
     { upsert: true },
   );
 
-  const meta = await getMetaCollection();
-  await meta.updateOne(
-    { _id: 'last_change' },
-    { $set: { ...editor, sectionKey: key, at: now } },
-    { upsert: true },
-  );
+  await recordChange({ ...editor, sectionKey: key, at: now });
 }
 
 export type SectionMeta = {

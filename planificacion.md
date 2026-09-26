@@ -1251,7 +1251,8 @@ export async function getLastChange(): Promise<{
 ```
 
 Se invoca desde `setSection()` (repositorio), **no** desde la action. Así cualquier ruta de
-escritura futura queda auditada por construcción.
+escritura futura (un script, un import masivo, otra action) queda auditada por construcción y
+no por acordarse de llamarla.
 
 > **Nota sobre atomicidad:** `setSection` escribe en 2 colecciones (`landing_sections` y
 > `app_meta`). MongoDB no las hace atómicas sin transacción. Es aceptable aquí: si la segunda
@@ -1284,8 +1285,11 @@ Contenido de la vista, ajustado al alcance solicitado (**solo el autor, sin log 
 3. Indicador del estado de altas: "Registro público: activo / cerrado" según `ALLOW_PUBLIC_SIGNUP`.
    Evita dejar el registro abierto por olvido.
 
-Proyección de Mongo explícita: `find({}, { projection: { name:1, email:1, createdAt:1 } })`.
-**Nunca** traer el documento completo de `user` a la vista.
+Proyección explícita **con `_id: 0`**: `find({}, { projection: { _id: 0, name:1, email:1, createdAt:1 } })`.
+
+> Enumerar los campos deseados NO basta: MongoDB incluye `_id` por defecto salvo que se excluya.
+> Sin `_id: 0`, el ObjectId de cada cuenta acabaría en el HTML servido. No es una credencial,
+> pero es un identificador interno que la vista no necesita.
 
 ### 8.3 Criterios de aceptación Tanda 8
 
@@ -1294,6 +1298,10 @@ Proyección de Mongo explícita: `find({}, { projection: { name:1, email:1, crea
 - [ ] Base sin cambios registrados → estado vacío, sin excepción.
 - [ ] La lista de cuentas no expone `password`, `providerId` ni `_id` en el HTML servido.
 - [ ] Zona horaria correcta: guardar a las 23:30 CDMX no muestra la fecha del día siguiente.
+- [ ] Con MongoDB caído y sesión en el `cookieCache`, la página responde 200 con el banner de
+      error en lugar de un 500. (Propiedad emergente del `cookieCache` de 5 min: la sesión se
+      valida sin tocar la base, así que el panel degrada en vez de caerse.)
+- [ ] `app_meta` sigue teniendo UN documento `last_change`, no una colección que crece.
 
 ---
 
@@ -1450,6 +1458,7 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 22 | Better Auth exige header `Origin` en POST (CSRF) | Un cliente que no lo envíe recibe 403 | Los navegadores lo envían siempre en POST. Afecta solo a pruebas con curl. |
 | 23 | Editor mostrando semilla con la base caída | El editor guardaría sobre datos que no vio | La página comprueba la conexión aparte de `getSection` y avisa con `DbErrorBanner`. |
 | 25 | `upsert: true` en el claim del webhook | E11000 dentro del enfriamiento — el caso común | Init con `$setOnInsert` separado del claim condicional sin upsert. |
+| 27 | Proyección sin `_id: 0` | El ObjectId de cada cuenta se publica en el HTML | `projection: { _id: 0, ... }` explícito en `getUsersView`. |
 | 26 | `pending: false` en la ruta de éxito del webhook | Los guardados concurrentes posteriores al claim se quedan sin publicar | La ruta de éxito no toca `pending`; el claim ya lo gestionó. |
 | 24 | **Comillas arrastradas al pegar env vars en Vercel** (`"https://..."`) | Build abortado con `Invalid URL`, sin decir qué variable ni qué valor. En `BETTER_AUTH_URL` es peor: rompe las cookies en silencio | `normalizeUrlEnv` en `src/lib/env.ts` + copia en `astro.config.mjs`: quita comillas, añade protocolo, quita slash final, avisa en el log, y si sigue siendo inválido falla nombrando la variable y el valor. `.env.example` ya no usa comillas. |
 
