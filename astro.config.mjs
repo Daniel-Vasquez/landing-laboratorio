@@ -119,6 +119,38 @@ export default defineConfig({
 
   vite: {
     plugins: [tailwindcss()],
+
+    optimizeDeps: {
+      /**
+       * Pre-empaquetado explícito de las dependencias de cliente.
+       *
+       * Sin esto, Vite las descubre tarde: los islands del panel solo se cargan
+       * al entrar a /admin/contenido/[key], y ahí re-optimiza y ROTA el
+       * `browserHash`. Los módulos ya servidos siguen pidiendo el hash viejo,
+       * reciben un 504, y el import del runtime JSX queda sin resolver:
+       *
+       *   TypeError: _jsxDEV is not a function
+       *
+       * Declarándolas aquí, el conjunto está completo al arrancar el servidor y
+       * el hash no cambia a mitad de sesión. Solo afecta a `astro dev`: el
+       * build de producción no usa el optimizador.
+       */
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'better-auth/client',
+        'zod',
+        /**
+         * El cliente de Astro Actions. Es el que de verdad llegaba tarde: no
+         * lo carga ninguna página pública, solo el primer island del panel que
+         * llama a `actions.*`, que es justo el editor de contenido.
+         */
+        'astro/actions/runtime/entrypoints/client.js',
+      ],
+    },
   },
 
   prefetch: { prefetchAll: false },

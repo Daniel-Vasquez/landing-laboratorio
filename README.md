@@ -112,6 +112,26 @@ después esto en el navegador:
 - [ ] axe DevTools en `/` y en `/admin/contenido/hero`: 0 violaciones serias.
 - [ ] Navegar y editar una sección **usando solo el teclado**.
 
+## Si el panel falla con `_jsxDEV is not a function`
+
+Es un desajuste del optimizador de dependencias de Vite en **desarrollo**
+(`jsxDEV` es el runtime de dev; producción no lo usa). Ocurría porque los islands
+del panel solo se cargan al entrar a `/admin/contenido/...`: Vite descubría ahí
+dependencias nuevas, re-optimizaba, rotaba el `browserHash`, y los módulos ya
+servidos quedaban pidiendo el hash viejo y recibían un 504.
+
+Está resuelto declarando esas dependencias en `optimizeDeps.include`
+(`astro.config.mjs`). Si vuelve a aparecer tras añadir una librería de cliente:
+
+```bash
+npx astro dev stop
+rm -rf node_modules/.vite .astro
+npx astro dev
+```
+
+y recarga el navegador con caché forzada. Si persiste, añade la dependencia
+nueva a `optimizeDeps.include`.
+
 ## Documentos
 
 - `planificacion.md` — hoja de ruta por Tandas, con las desviaciones y los 30
