@@ -17,7 +17,50 @@ try {
   // En Vercel no existe .env: las variables ya vienen inyectadas.
 }
 
-const siteUrl = process.env.PUBLIC_SITE_URL;
+/**
+ * Normalización de PUBLIC_SITE_URL.
+ *
+ * Duplica a propósito la lógica de `src/lib/env.ts#normalizeUrlEnv`: este
+ * archivo se carga antes de que exista cualquier pipeline de módulos, así que
+ * no puede importar TypeScript del proyecto. Mantener las dos copias en sync
+ * es más barato que el fallo que evitan.
+ *
+ * Sin esto, un valor con comillas ("https://sitio.com", que es lo que se copia
+ * al pegar desde .env) o sin protocolo hace que Astro aborte el build con un
+ * "Invalid URL" que no dice qué variable ni qué valor.
+ */
+function normalizeSiteUrl(raw) {
+  if (!raw) return undefined;
+
+  let value = String(raw).trim();
+
+  const unquoted = value.replace(/^["']|["']$/g, '');
+  if (unquoted !== value) {
+    console.warn('[config] PUBLIC_SITE_URL traía comillas y se han quitado. En Vercel el valor va sin comillas.');
+    value = unquoted.trim();
+  }
+
+  if (!/^https?:\/\//.test(value)) {
+    console.warn('[config] PUBLIC_SITE_URL no incluía protocolo; se asume https://');
+    value = `https://${value}`;
+  }
+
+  // Sin slash final: debe coincidir EXACTAMENTE con BETTER_AUTH_URL.
+  value = value.replace(/\/+$/, '');
+
+  try {
+    new URL(value);
+  } catch {
+    throw new Error(
+      `[config] PUBLIC_SITE_URL no es un URL válido. Valor recibido: ${JSON.stringify(raw)}. ` +
+        'Se espera algo como https://laboratorio.tudominio.com (sin comillas y sin slash final).',
+    );
+  }
+
+  return value;
+}
+
+const siteUrl = normalizeSiteUrl(process.env.PUBLIC_SITE_URL);
 
 // Fallar ruidosamente antes que emitir canonical/OG/sitemap apuntando a localhost.
 if (!siteUrl && process.env.VERCEL) {

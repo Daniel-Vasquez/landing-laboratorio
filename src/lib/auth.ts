@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
-import { boolEnv, optionalEnv, requireEnv } from './env.ts';
+import { boolEnv, optionalEnv, requireEnv, requireUrlEnv } from './env.ts';
 import { getClientSync, getDbSync } from './mongo.ts';
 
 /**
@@ -30,12 +30,15 @@ export const auth = betterAuth({
   database: mongodbAdapter(getDbSync(), { client: getClientSync() }),
 
   secret: requireEnv('BETTER_AUTH_SECRET'),
-  baseURL: requireEnv('BETTER_AUTH_URL'),
+  // requireUrlEnv normaliza comillas, protocolo y slash final: un valor con
+  // comillas aquí NO rompería el build, rompería las cookies de sesión en
+  // producción, que es un fallo mucho más difícil de diagnosticar.
+  baseURL: requireUrlEnv('BETTER_AUTH_URL'),
   basePath: '/api/auth',
 
   // Sin esto, Better Auth rechaza las peticiones del propio dominio en producción.
   // Debe coincidir EXACTAMENTE con el origen servido, sin slash final.
-  trustedOrigins: [requireEnv('PUBLIC_SITE_URL')],
+  trustedOrigins: [requireUrlEnv('PUBLIC_SITE_URL')],
 
   emailAndPassword: {
     enabled: true,

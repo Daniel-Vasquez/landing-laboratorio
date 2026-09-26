@@ -44,3 +44,61 @@ export function intEnv(key: string, fallback: number): number {
   const parsed = Number(process.env[key]);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+/**
+ * Normaliza y valida una variable que debe contener un URL absoluto.
+ *
+ * Existe porque los tres fallos más comunes al cargar estas variables en un
+ * panel de hosting producen errores pésimos:
+ *   - `"https://sitio.com"` con comillas (se copian junto al valor desde .env)
+ *     -> `new URL()` lanza "Invalid URL" sin decir cuál ni por qué.
+ *   - `sitio.com` sin protocolo -> mismo error opaco.
+ *   - espacios o saltos de línea al final -> a veces pasa, a veces no.
+ * Las comillas y los espacios nunca son intencionados, y un host desnudo es
+ * inequívoco, así que se corrigen avisando en el log en lugar de tumbar el
+ * deploy. Cualquier otro valor inválido sí falla, con el valor recibido a la
+ * vista.
+ */
+export function normalizeUrlEnv(key: string, raw: string | undefined): string {
+  if (!raw) {
+    throw new Error(
+      `[env] ${key} no está definida. Cárgala en Vercel -> Settings -> Environment Variables.`,
+    );
+  }
+
+  let value = raw.trim();
+
+  const unquoted = value.replace(/^["']|["']$/g, '');
+  if (unquoted !== value) {
+    console.warn(
+      `[env] ${key} traía comillas en el valor y se han quitado. ` +
+        `En Vercel el valor se escribe sin comillas.`,
+    );
+    value = unquoted.trim();
+  }
+
+  if (!/^https?:\/\//.test(value)) {
+    console.warn(`[env] ${key} no incluía protocolo; se asume https://`);
+    value = `https://${value}`;
+  }
+
+  // Sin slash final: BETTER_AUTH_URL y PUBLIC_SITE_URL deben coincidir
+  // EXACTAMENTE con el origen servido o las cookies de sesión se rechazan.
+  value = value.replace(/\/+$/, '');
+
+  try {
+    new URL(value);
+  } catch {
+    throw new Error(
+      `[env] ${key} no es un URL válido. Valor recibido: ${JSON.stringify(raw)}. ` +
+        `Se espera algo como https://laboratorio.tudominio.com (sin comillas y sin slash final).`,
+    );
+  }
+
+  return value;
+}
+
+/** Variable de entorno obligatoria que debe ser un URL absoluto. */
+export function requireUrlEnv(key: string): string {
+  return normalizeUrlEnv(key, process.env[key]);
+}

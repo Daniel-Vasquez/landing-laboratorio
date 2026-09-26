@@ -221,6 +221,13 @@ export default defineConfig({
 > **`middlewareMode: 'classic'` es obligatorio.** Con `'edge'`, `src/middleware.ts` se compila al
 > runtime Edge y el driver `mongodb` (sockets TCP) falla en build/runtime.
 >
+> **`PUBLIC_SITE_URL` debe normalizarse antes de asignarla a `site`.** Astro la valida con
+> `new URL()` y aborta el build con un `Invalid URL` que no identifica la variable. Los dos
+> valores que lo provocan son los dos errores más fáciles de cometer al cargarla en un panel de
+> hosting: con comillas (`"https://sitio.com"`, que es lo que se copia al pegar desde `.env`) y
+> sin protocolo (`sitio.com`). La normalización se duplica en `astro.config.mjs` porque ese
+> archivo se carga antes de que exista pipeline de módulos y no puede importar TypeScript.
+
 > **`astro.config.mjs` NO lee `.env`.** Corre en Node antes de que Vite cargue los archivos de
 > entorno, así que `process.env` solo trae variables reales de la shell. En Vercel eso basta,
 > pero en local `site` caería en su valor por defecto sin avisar. Solución aplicada:
@@ -1429,6 +1436,7 @@ Un mismatch rompe `trustedOrigins` y las cookies de sesión.
 | 21 | `z` de `astro:schema` | Deprecado; se elimina en Astro 8 | Migrado a `astro/zod`. |
 | 22 | Better Auth exige header `Origin` en POST (CSRF) | Un cliente que no lo envíe recibe 403 | Los navegadores lo envían siempre en POST. Afecta solo a pruebas con curl. |
 | 23 | Editor mostrando semilla con la base caída | El editor guardaría sobre datos que no vio | La página comprueba la conexión aparte de `getSection` y avisa con `DbErrorBanner`. |
+| 24 | **Comillas arrastradas al pegar env vars en Vercel** (`"https://..."`) | Build abortado con `Invalid URL`, sin decir qué variable ni qué valor. En `BETTER_AUTH_URL` es peor: rompe las cookies en silencio | `normalizeUrlEnv` en `src/lib/env.ts` + copia en `astro.config.mjs`: quita comillas, añade protocolo, quita slash final, avisa en el log, y si sigue siendo inválido falla nombrando la variable y el valor. `.env.example` ya no usa comillas. |
 
 ## Apéndice B — Lo que este plan deja fuera (por requerimiento)
 
