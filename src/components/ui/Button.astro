@@ -1,18 +1,29 @@
 ---
 interface Props {
   href: string;
+  /** `form` renderiza un disparador del formulario en lugar de un enlace. */
+  mode?: 'link' | 'form';
+  /** Sección de origen. Se registra con el lead para saber desde dónde convirtió. */
+  servicio?: string;
   variant?: 'primary' | 'secondary';
   size?: 'md' | 'lg';
   class?: string;
 }
 
-const { href, variant = 'primary', size = 'md', class: extra = '' } = Astro.props;
+const {
+  href,
+  mode = 'link',
+  servicio,
+  variant = 'primary',
+  size = 'md',
+  class: extra = '',
+} = Astro.props;
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors';
 
 const variants = {
-  // #0d9488 como FONDO con texto blanco = 4.6:1 (AA). Nunca como texto pequeño.
+  // #0f766e como FONDO con texto blanco = 5.47:1 (AA). Nunca como texto pequeño.
   primary: 'bg-primary text-primary-fg hover:bg-primary-hover',
   secondary: 'border border-border bg-surface text-fg hover:bg-surface-muted',
 } as const;
@@ -23,11 +34,28 @@ const sizes = {
 } as const;
 
 const isExternal = href.startsWith('http');
+const classes = [base, variants[variant], sizes[size], extra];
 ---
-<a
-  href={href}
-  class:list={[base, variants[variant], sizes[size], extra]}
-  {...isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
->
-  <slot />
-</a>
+{
+  mode === 'form' ? (
+    /*
+     * <button>, no <a href="#">.
+     *
+     * Un enlace que no navega miente al lector de pantalla, al menú contextual
+     * y a «abrir en pestaña nueva». Este control abre un diálogo, así que es un
+     * botón. `data-lead-form` lo capta el script que carga el formulario bajo
+     * demanda (Tanda 15).
+     */
+    <button type="button" data-lead-form data-servicio={servicio} class:list={classes}>
+      <slot />
+    </button>
+  ) : (
+    <a
+      href={href}
+      class:list={classes}
+      {...isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
+    >
+      <slot />
+    </a>
+  )
+}

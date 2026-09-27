@@ -22,6 +22,14 @@ export type Field =
    * guarda con el resto del formulario y no necesita una action propia.
    */
   | { kind: 'icon'; path: string; label: string; hint?: string }
+  /** Desplegable de valores cerrados. Lo usa el modo del CTA. */
+  | {
+      kind: 'select';
+      path: string;
+      label: string;
+      options: ReadonlyArray<{ value: string; label: string }>;
+      hint?: string;
+    }
   | {
       kind: 'list';
       path: string;
@@ -48,11 +56,21 @@ export type Field =
 const CTA_FIELDS: Field[] = [
   { kind: 'text', path: 'cta.label', label: 'Texto del botón', max: 60 },
   {
+    kind: 'select',
+    path: 'cta.mode',
+    label: 'Acción del botón',
+    options: [
+      { value: 'form', label: 'Abrir el formulario de contacto' },
+      { value: 'link', label: 'Ir a un enlace' },
+    ],
+    hint: 'El formulario se configura en la sección «Formulario» del panel.',
+  },
+  {
     kind: 'text',
     path: 'cta.href',
-    label: 'Destino del botón',
+    label: 'Destino del enlace',
     max: 300,
-    hint: 'Ancla interna (#agendar) o URL completa (https://wa.me/52..., tel:+52...).',
+    hint: 'Solo se usa si la acción es «Ir a un enlace». Ancla (#agendar) o URL completa.',
   },
 ];
 
@@ -261,6 +279,7 @@ export function emptyItem(fields: Field[]): Record<string, unknown> {
     if (field.kind === 'list' || field.kind === 'repeater') item[field.path] = [];
     // `icon` se deja SIN definir: el esquema lo tiene como opcional y un string
     // vacío no validaría. El picker lo rellena cuando el editor lo elige.
+    else if (field.kind === 'select') item[field.path] = field.options[0]?.value ?? '';
     else if (field.kind !== 'icon') item[field.path] = '';
   }
   return item;

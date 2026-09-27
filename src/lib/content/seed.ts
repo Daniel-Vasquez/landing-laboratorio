@@ -13,7 +13,14 @@ import type { LandingContent } from './schemas.ts';
  * el seed solo se aplica con `$setOnInsert`, así que no pisa ediciones.
  */
 
-const CTA = { label: 'Agenda tu estudio', href: '#agendar' } as const;
+/**
+ * `mode: 'form'` por defecto: los 8 CTA abren el formulario de captación.
+ *
+ * Resuelve además el enlace muerto registrado desde la Tanda 3: los ocho
+ * apuntaban a `#agendar`, y el botón DENTRO de esa sección se enlazaba a sí
+ * mismo. Como disparador del formulario, el problema desaparece.
+ */
+const CTA = { label: 'Agenda tu estudio', mode: 'form', href: '#agendar' } as const;
 
 export const SEED: LandingContent = {
   hero: {

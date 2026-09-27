@@ -2574,6 +2574,822 @@ npm run db:seed-layout
 
 ---
 
+## Contexto para las Tandas 14 y 15 — captación de leads
+
+Las dos Tandas siguientes añaden un formulario de captación y un gestor de CTAs.
+Antes de tocar código hay **un bloqueante legal** y **una restricción técnica**
+que condicionan todo el diseño.
+
+### C.1 BLOQUEANTE: el formulario recoge datos personales sensibles
+
+Dos de las preguntas de `preguntas-formulario.md` capturan intención clínica
+asociada a una persona identificable:
+
+> «¿Cuál es el motivo principal de tu consulta hoy?» → *«Presento síntomas o
+> malestar y quiero revisarme»*
+>
+> «¿Qué tipo de estudio necesitas?» → *«Control de glucosa o diabetes»*
+
+En México, la **LFPDPPP** clasifica los datos de salud como **sensibles**
+(art. 3 fr. VI) y exige **consentimiento expreso y por escrito** (art. 9), además
+de un aviso de privacidad accesible antes de la recolección.
+
+Estado verificado hoy: **`/aviso-de-privacidad` no existe** —el footer ya enlaza
+a un 404 desde la Tanda 3— y el formulario planteado no tiene casilla de
+consentimiento.
+
+**Tres requisitos de lanzamiento, no opcionales:**
+
+1. Crear `src/pages/aviso-de-privacidad.astro` con el aviso redactado por el
+   cliente o su asesor legal. **No lo redacta el desarrollador.**
+2. Casilla de consentimiento **obligatoria, sin marcar por defecto**, en el paso
+   final: *«He leído y acepto el [aviso de privacidad] y autorizo el tratamiento
+   de mis datos personales sensibles para agendar mis estudios.»*
+3. Guardar `consentimiento: true` y su marca de tiempo junto al lead. Un
+   consentimiento que no se puede demostrar no existe a efectos prácticos.
+
+> **Consideración adicional que el cliente debe decidir**, no el desarrollador:
+> registrar intención clínica en Google Sheets coloca datos de salud en
+> infraestructura de un tercero fuera de México. Es viable —la LFPDPPP lo permite
+> con el aviso adecuado—, pero tiene que estar declarado en el aviso de
+> privacidad. Si el cliente prefiere no hacerlo, la alternativa es registrar en
+> Sheets **solo** nombre, medio y fecha, y dejar el motivo y el tipo de estudio
+> únicamente en el mensaje que llega por WhatsApp o correo.
+
+### C.2 RESTRICCIÓN: el presupuesto de JavaScript de la landing
+
+Medido hoy: **1995 B gz, sin React**. Un formulario modal de 3 pasos es
+interactividad real, y es la primera funcionalidad del proyecto que la necesita
+en la página pública.
+
+| Opción | Coste inicial en `/` | Veredicto |
+|---|---|---|
+| Island de React (`client:load`) | **~68 KB** (34×) | Descartada |
+| Island de React (`client:idle`) | ~68 KB, solo diferido | Descartada: lo paga todo visitante |
+| **Vanilla + `import()` dinámico al primer clic** | **0 B** | **Elegida** |
+
+El formulario solo se necesita cuando alguien pulsa un CTA. Un script vanilla
+diminuto escucha los clics y carga el módulo del formulario bajo demanda:
+
+```ts
+// El coste lo paga SOLO quien interactúa. Quien lee la landing y se va
+// no descarga un byte de formulario.
+document.addEventListener('click', async (event) => {
+  const trigger = (event.target as HTMLElement).closest('[data-lead-form]');
+  if (!trigger) return;
+  event.preventDefault();
+  const { openLeadForm } = await import('../lib/leads/form-client.ts');
+  openLeadForm(trigger.getAttribute('data-servicio') ?? '');
+});
+```
+
+Precedente en el proyecto: `ThemeToggle` y `MobileNav` ya son vanilla por esta
+misma razón (Tanda 1), y `MobileNav` usa `<dialog>` + `showModal()`, que aporta
+focus trap, cierre con `Escape` y fondo inerte sin escribir código. El formulario
+reutiliza ese patrón.
+
+**Criterio de aceptación no negociable:** `npm run budget` debe seguir pasando
+con el presupuesto actual. El módulo del formulario no cuenta porque no se
+descarga en la carga inicial, pero **hay que medirlo aparte** y mantenerlo por
+debajo de 8 KB gz.
+
+---
+
+## TANDA 14 — Configuración de contacto, CTAs y preguntas editables
+
+**Objetivo:** que el administrador decida qué hace cada CTA, edite el texto de
+las preguntas y configure los destinos de contacto. Sin tocar la landing todavía.
+
+### 14.1 Dónde vive cada dato: configuración vs. credenciales
+
+| Dato | Dónde | Por qué |
+|---|---|---|
+| Número de WhatsApp | MongoDB, editable | No es secreto; el cliente lo cambia sin desplegar |
+| Número para llamadas | MongoDB, editable | Ídem |
+| Correo de destino | MongoDB, editable | Ídem |
+| `WEB3FORMS_ACCESS_KEY` | **Variable de entorno** | Credencial: quien la tenga puede enviar correos en tu nombre |
+| `SHEETS_WEBHOOK_URL` | **Variable de entorno** | Endpoint de escritura sin autenticación de usuario |
+| `SHEETS_WEBHOOK_TOKEN` | **Variable de entorno** | Secreto compartido con el Apps Script |
+
+> El requerimiento dice «configurado en el Dashboard» para el correo y los
+> números, y así se implementa. Las **credenciales** no: ponerlas en una
+> colección que el panel edita significa que un fallo de autorización se
+> convierte en filtración de credenciales, y que quedan en los respaldos de la
+> base. Van en `.env` y en Vercel, como el resto (`MONGODB_URI`,
+> `BETTER_AUTH_SECRET`, `CLOUDINARY_API_SECRET`).
+
+### 14.2 Registro de preguntas — `src/lib/leads/questions.ts`
+
+El requerimiento es explícito: el admin **solo** reformula textos y modifica
+opciones; **no** puede añadir ni eliminar preguntas. Mismo principio que las
+ranuras de imagen (`slots.ts`), el catálogo de iconos (`names.ts`) y el registro
+de secciones (`registry.ts`): **lo que define la estructura vive en código.**
+
+```ts
+// src/lib/leads/questions.ts
+export type QuestionId =
+  | 'contacto'   // persistente en los 3 pasos
+  | 'motivo'     // paso 1
+  | 'estudio'    // paso 2
+  | 'plazo';     // paso 2
+
+export type QuestionDefinition = {
+  id: QuestionId;
+  /** 0 = persistente, visible en todos los pasos. */
+  step: 0 | 1 | 2 | 3;
+  /** Texto por defecto; el panel puede reformularlo. */
+  defaultLabel: string;
+  /** Opciones por defecto. El panel puede editar sus etiquetas. */
+  defaultOptions: ReadonlyArray<{ value: string; label: string; featured?: boolean }>;
+  /** `false` = el panel no puede añadir ni quitar opciones (solo la de contacto). */
+  optionsEditable: boolean;
+  layout: 'stack' | 'inline';
+};
+
+export const QUESTIONS: readonly QuestionDefinition[] = [
+  {
+    id: 'contacto',
+    step: 0,
+    defaultLabel: '¿Cómo prefieres que te contactemos?',
+    // CERRADAS: cada valor activa una rama de envío distinta en 15.4.
+    // Añadir una opción sin implementar su rama dejaría un envío muerto.
+    optionsEditable: false,
+    layout: 'inline',
+    defaultOptions: [
+      { value: 'whatsapp', label: 'WhatsApp', featured: true },
+      { value: 'llamada',  label: 'Llamada telefónica' },
+      { value: 'correo',   label: 'Correo electrónico' },
+    ],
+  },
+  {
+    id: 'motivo',
+    step: 1,
+    defaultLabel: '¿Cuál es el motivo principal de tu consulta hoy?',
+    optionsEditable: true,
+    layout: 'stack',
+    defaultOptions: [
+      { value: 'chequeo',  label: 'Chequeo preventivo de rutina (revisión general anual)' },
+      { value: 'orden',    label: 'Indicación u orden de mi médico' },
+      { value: 'sintomas', label: 'Presento síntomas o malestar y quiero revisarme' },
+    ],
+  },
+  {
+    id: 'estudio',
+    step: 2,
+    defaultLabel: '¿Qué tipo de estudio o perfil necesitas realizarte?',
+    optionsEditable: true,
+    layout: 'stack',
+    defaultOptions: [
+      { value: 'checkup',    label: 'Check-up general o preventivo (Biometría, Química, Orina)' },
+      { value: 'glucosa',    label: 'Control de glucosa o diabetes (Hemoglobina glucosilada)' },
+      { value: 'lipidos',    label: 'Salud cardiovascular y colesterol (Perfil de lípidos)' },
+      { value: 'hormonal',   label: 'Perfiles hormonales o tiroideos' },
+      { value: 'orientacion',label: 'Otro estudio especializado / Requiero orientación' },
+    ],
+  },
+  {
+    id: 'plazo',
+    step: 2,
+    defaultLabel: '¿Para cuándo planeas realizarte tus estudios?',
+    optionsEditable: true,
+    layout: 'inline',
+    defaultOptions: [
+      { value: 'inmediato', label: 'Lo antes posible (Hoy o mañana)' },
+      { value: 'semana',    label: 'Esta misma semana' },
+      { value: 'mes',       label: 'En los próximos 15 a 30 días' },
+      { value: 'cotizando', label: 'Solo estoy cotizando por el momento' },
+    ],
+  },
+];
+
+export const QUESTION_IDS = QUESTIONS.map((q) => q.id);
+export function isQuestionId(v: unknown): v is QuestionId { /* … */ }
+export function getQuestion(id: string) { /* … */ }
+```
+
+> **`value` es INMUTABLE y `label` es editable.** Es el mismo patrón que resolvió
+> el renombrado de tarjetas en la Tanda 13: si el emparejamiento dependiera del
+> texto, reformular «Control de glucosa o diabetes» rompería el histórico de
+> leads ya registrados en Sheets. El panel edita etiquetas; los valores no se
+> tocan.
+>
+> Al **añadir** una opción, el servidor genera su `value` (igual que `imageKey`).
+> Al **eliminar** una, los leads antiguos conservan su texto porque en Sheets se
+> registra la etiqueta, no el código.
+
+### 14.3 Esquema en MongoDB — documento `lead_form` en `landing_config`
+
+```jsonc
+{
+  "_id": "lead_form",
+  "contacto": {
+    "whatsapp": "+525512345678",      // E.164
+    "telefono": "+525512345678",
+    "correo": "laboratorio@hospitalcristal.mx"
+  },
+  "preguntas": {
+    "contacto": { "label": "¿Cómo prefieres que te contactemos?", "options": [ /* value+label */ ] },
+    "motivo":   { "label": "…", "options": [ /* … */ ] },
+    "estudio":  { "label": "…", "options": [ /* … */ ] },
+    "plazo":    { "label": "…", "options": [ /* … */ ] }
+  },
+  "textos": {
+    "titulo": "Agenda tus estudios",
+    "exito": "¡Listo! Te contactaremos muy pronto.",
+    "consentimiento": "He leído y acepto el aviso de privacidad…"
+  },
+  "updatedAt": ISODate,
+  "updatedBy": { "userId": "…", "name": "…", "email": "…" }
+}
+```
+
+Validación en `src/lib/leads/schemas.ts`:
+
+```ts
+const e164 = z.string().regex(/^\+[1-9]\d{7,14}$/, {
+  message: 'Usa formato internacional, por ejemplo +525512345678.',
+});
+
+export const leadFormConfigSchema = z.object({
+  contacto: z.object({
+    whatsapp: e164,
+    telefono: e164,
+    correo: z.email(),
+  }),
+  preguntas: z.record(
+    z.enum(QUESTION_IDS as [string, ...string[]]),
+    z.object({
+      label: z.string().trim().min(5).max(160),
+      options: z.array(z.object({
+        value: z.string().min(1).max(40),
+        label: z.string().trim().min(1).max(120),
+        featured: z.boolean().optional(),
+      })).min(2).max(8),
+    }),
+  ),
+  textos: z.object({ /* … */ }),
+});
+```
+
+> **E.164 con `+` y sin espacios** no es un capricho: la URL de WhatsApp
+> (`api.whatsapp.com/send?phone=`) exige el número **sin** `+`, sin espacios y
+> sin guiones, mientras que `tel:` acepta el `+`. Guardar un formato canónico y
+> derivar los dos evita que un número escrito como `55 1234 5678` produzca un
+> enlace de WhatsApp que no abre ningún chat — un fallo silencioso que solo se
+> detecta perdiendo leads.
+
+### 14.4 Mapeo de CTAs — extensión del esquema existente
+
+El `cta` actual es `{ label, href }` en 8 secciones. Se amplía:
+
+```ts
+// src/lib/content/schemas.ts
+const cta = z.object({
+  label: z.string().min(1).max(60),
+  /**
+   * `link` = navega al `href`. `form` = abre el formulario modal.
+   * `.default('link')` es OBLIGATORIO: los 8 CTA ya guardados no tienen `mode`,
+   * y sin valor por defecto las 8 secciones dejarían de validar y
+   * `repository.ts` las sustituiría por el contenido semilla.
+   */
+  mode: z.enum(['link', 'form']).default('link'),
+  href: z.string().min(1).max(300),
+});
+```
+
+`Button.astro` decide qué renderizar:
+
+```astro
+{mode === 'form' ? (
+  /* <button>, no <a>: no navega a ningún sitio. Un enlace con href="#" que
+     abre un modal miente a los lectores de pantalla y al menú contextual. */
+  <button type="button" data-lead-form data-servicio={servicio} class:list={[...]}>
+    <slot />
+  </button>
+) : (
+  <a href={href} {...isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {}}>
+    <slot />
+  </a>
+)}
+```
+
+> **`data-servicio`** lleva la sección de origen (`estudios`, `beneficios`…). Se
+> registra en el lead: saber desde qué sección convirtió alguien es la
+> información que hace accionable la hoja de cálculo.
+
+### 14.5 Resuelve el enlace muerto del CTA final
+
+Desde la Tanda 3 hay un pendiente registrado: los 8 CTA apuntan a `#agendar`, y
+el botón **dentro** de esa sección se enlaza a sí mismo. Con `mode: 'form'` el
+problema desaparece: el CTA abre el formulario en lugar de navegar.
+
+La migración (14.7) pone los 8 en `mode: 'form'` por defecto, que es lo que el
+cliente pidió. `cta_final` deja de ser un enlace muerto.
+
+### 14.6 UI del panel
+
+**Ruta nueva:** `src/pages/admin/formulario.astro` (`prerender = false`), con su
+entrada en el sidebar de `AdminLayout.astro`.
+
+**Componentes nuevos:**
+
+```
+src/components/admin/LeadFormEditor.tsx     contactos + textos + preguntas
+src/components/admin/QuestionEditor.tsx     una pregunta: label + opciones
+```
+
+Reglas de la interfaz, derivadas del requerimiento:
+
+- **No existe botón «Añadir pregunta» ni «Eliminar pregunta».** No es que estén
+  deshabilitados: no se renderizan. Y la action rechaza cualquier `id` fuera del
+  registro, así que ocultarlos no es la defensa —lo es el registro en código.
+- La pregunta `contacto` muestra sus 3 opciones **en solo lectura**, con una nota
+  explicando que cada una activa una rama de envío distinta.
+- Las otras tres permiten editar etiquetas y añadir/quitar opciones (mín. 2,
+  máx. 8), reutilizando el patrón de `RepeaterField` con sus botones ↑ ↓.
+
+**El mapeo de CTAs NO vive aquí.** Cada CTA se edita en su propia sección
+(`/admin/contenido/[key]`), junto al texto del botón, que es donde el
+administrador ya lo busca. Se añade un `kind` nuevo al `fieldMap`:
+
+```ts
+| { kind: 'select'; path: string; label: string; options: Array<{ value: string; label: string }>; hint?: string }
+```
+
+…y la sección declara:
+
+```ts
+{ kind: 'select', path: 'cta.mode', label: 'Acción del botón', options: [
+    { value: 'form', label: 'Abrir formulario de contacto' },
+    { value: 'link', label: 'Ir a un enlace' },
+]},
+{ kind: 'text', path: 'cta.href', label: 'Destino del enlace',
+  hint: 'Solo se usa si la acción es "Ir a un enlace".' },
+```
+
+### 14.7 Migración — `scripts/seed-lead-form.ts`
+
+```bash
+npm run db:seed-lead-form
+```
+
+- Crea `lead_form` con las preguntas del registro (`$setOnInsert`, idempotente).
+- Deja los contactos **vacíos** y hace que `preflight` avise hasta que se
+  rellenen: un número de WhatsApp de ejemplo en producción envía leads a un
+  desconocido.
+- Pone `cta.mode = 'form'` en las 8 secciones que aún no lo tengan.
+
+### 14.8 Criterios de aceptación — Tanda 14
+
+- [ ] `npm run build` sin warnings `[content]`: las 8 secciones siguen validando
+      con `mode` por defecto.
+- [ ] El panel no ofrece añadir ni eliminar preguntas en ningún punto.
+- [ ] `POST` a la action con un `id` de pregunta inventado → **400**, sin escribir.
+- [ ] `POST` que intenta cambiar las opciones de `contacto` → se descartan y se
+      conservan las tres del registro.
+- [ ] Un teléfono como `55 1234 5678` → **400** con el mensaje del campo.
+- [ ] Un correo inválido → **400**.
+- [ ] Cambiar el CTA de una sección a «Ir a un enlace» y guardar → el HTML
+      renderiza `<a href>`; con «Abrir formulario» renderiza `<button>`.
+- [ ] `npm run preflight` avisa mientras los contactos estén vacíos.
+- [ ] Sin sesión → **401**.
+
+---
+
+## TANDA 15 — Formulario multi-paso, envío y registro de leads
+
+**Objetivo:** el formulario funcionando en la landing, con sus tres rutas de
+envío y el registro en Google Sheets.
+
+### 15.1 Estructura de pasos
+
+La primera pregunta **no es un paso**: es una cabecera persistente visible en los
+tres, tal como pide el requerimiento.
+
+```
+┌─ Persistente ─────────────────────────────────────────────┐
+│ ¿Cómo prefieres que te contactemos?                        │
+│  ( ) WhatsApp ★   ( ) Llamada telefónica   ( ) Correo      │
+└────────────────────────────────────────────────────────────┘
+  Paso 1 de 3   Motivo principal de tu consulta
+  Paso 2 de 3   Tipo de estudio  +  Para cuándo
+  Paso 3 de 3   Nombre completo  +  contacto dinámico  +  consentimiento
+```
+
+- La cabecera se renderiza **una vez**, fuera del contenedor de pasos, así que
+  cambiar de paso no la remonta ni pierde la selección.
+- El campo de contacto del paso 3 **depende de la cabecera**: teléfono de 10
+  dígitos para `whatsapp` y `llamada`, correo para `correo`. Cambiar la
+  preferencia en el paso 3 debe cambiar el campo **sin** perder lo escrito en el
+  otro: se guardan los dos valores en el estado y se muestra el que toca.
+
+**Accesibilidad de los pasos** —los tres puntos que más se olvidan:
+
+1. `<fieldset>` + `<legend>` por cada grupo de opciones. Un grupo de radios sin
+   `fieldset` deja al lector de pantalla sin saber a qué pregunta pertenece cada
+   opción.
+2. Al avanzar de paso, mover el foco al encabezado del paso nuevo y anunciarlo
+   con `aria-live`. Sin esto el foco se queda en el botón «Siguiente», que ya no
+   existe en el DOM, y el usuario de teclado queda a la deriva.
+3. `<dialog>` + `showModal()` para el contenedor, con `m-auto` — **el reset de
+   Tailwind aplica `margin: 0` a `*` y anula el centrado del navegador**, como se
+   documentó al corregir el selector de iconos.
+
+### 15.2 Archivos
+
+```
+src/lib/leads/questions.ts        registro (Tanda 14)
+src/lib/leads/schemas.ts          Zod: config + payload del lead
+src/lib/leads/repository.ts       lee config, guarda lead en Mongo
+src/lib/leads/sheets.ts           cliente del webhook de Apps Script
+src/lib/leads/web3forms.ts        envío de correo
+src/lib/leads/form-client.ts      ← módulo cargado BAJO DEMANDA (vanilla)
+src/components/landing/LeadForm.astro   markup del <dialog>, renderizado en build
+src/pages/api/leads.ts            endpoint público de envío
+```
+
+> **El markup se renderiza en build** dentro de `LandingLayout`, oculto en un
+> `<dialog>`. Solo el comportamiento llega bajo demanda. Así el formulario
+> existe en el HTML —indexable, y utilizable en cuanto carga el módulo— sin
+> costar JavaScript por adelantado.
+
+### 15.3 Endpoint — `src/pages/api/leads.ts`
+
+```ts
+export const prerender = false;
+export const POST: APIRoute = async ({ request, clientAddress }) => { /* … */ };
+```
+
+> **Ruta API con `fetch`, NO una Astro Action.** Importar `astro:actions` en el
+> cliente añade su runtime al bundle de la landing; un `fetch` a una ruta no
+> añade nada. En el panel las actions valen la pena por el tipado; aquí el
+> presupuesto manda.
+
+**Defensas obligatorias de un endpoint público:**
+
+| Defensa | Implementación |
+|---|---|
+| Honeypot | Campo `<input>` oculto `empresa`; si llega con valor → responder 200 y **descartar**. Responder 200 evita que el bot aprenda. |
+| Tiempo mínimo | Marca de tiempo al abrir el modal; un envío en < 3 s es un bot. |
+| Rate limit por IP | Colección `lead_rate` con índice TTL: máx. 5 envíos por IP / 10 min. |
+| Validación Zod | El payload completo, igual que las actions del panel. |
+| Tamaño | `Content-Length` máximo de 8 KB. |
+
+**Orden de operaciones, que importa:**
+
+```
+1. validar payload (Zod)          → 400 si falla
+2. rate limit + honeypot          → descarta en silencio
+3. leer config de MongoDB         → números y correo de destino
+4. guardar lead en `leads`        → la fuente de verdad propia
+5. registrar en Google Sheets     → si falla, NO aborta (ver abajo)
+6. si medio = correo → Web3Forms  → si falla, SÍ aborta: es la entrega
+7. responder { ok, medio, waUrl?, telUrl? }
+```
+
+> **Un fallo de Sheets no debe perder el lead.** Sheets es un registro
+> secundario; la fuente de verdad es la colección `leads` en MongoDB. Si el
+> Apps Script está caído se anota `sheetsError` en el documento y se sigue: el
+> cliente recibe su contacto igualmente. Al revés sería absurdo — perder un
+> paciente porque una hoja de cálculo no respondió.
+
+### 15.4 Las tres rutas de envío
+
+#### WhatsApp
+
+```ts
+// El número se guarda en E.164 (+525512345678); la API lo exige SIN el `+`.
+const phone = config.contacto.whatsapp.replace(/\D/g, '');
+const texto = [
+  `Hola, quiero agendar estudios de laboratorio.`,
+  ``,
+  `Nombre: ${lead.nombre}`,
+  `Motivo: ${labelDe('motivo', lead.motivo)}`,
+  `Estudio: ${labelDe('estudio', lead.estudio)}`,
+  `Cuándo: ${labelDe('plazo', lead.plazo)}`,
+].join('\n');
+
+const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(texto)}`;
+```
+
+> **Trampa crítica: el bloqueador de ventanas emergentes.**
+>
+> `window.open()` después de un `await` pierde el contexto de gesto de usuario y
+> el navegador lo bloquea. El lead se guarda pero la pestaña de WhatsApp no
+> abre, y el visitante cree que falló.
+>
+> Solución: abrir la ventana **de forma síncrona** en el manejador del clic,
+> antes del `await`, y asignarle la URL después:
+>
+> ```ts
+> // Síncrono, dentro del gesto del usuario:
+> const win = medio === 'whatsapp' ? window.open('about:blank', '_blank') : null;
+> const res = await fetch('/api/leads', { /* … */ });
+> const data = await res.json();
+> if (win) win.location.href = data.waUrl;
+> else mostrarEnlaceManual(data.waUrl);   // el bloqueador ganó: enlace visible
+> ```
+>
+> El `else` no es defensivo por gusto: algunos navegadores bloquean incluso la
+> apertura síncrona, y sin él ese visitante se queda sin salida.
+
+Tras abrir: **limpiar los inputs y mostrar el mensaje de éxito dentro del modal**,
+como pide el requerimiento.
+
+#### Correo — Web3Forms
+
+Se envía **desde el servidor**, no desde el navegador:
+
+```ts
+// src/lib/leads/web3forms.ts
+const response = await fetch('https://api.web3forms.com/submit', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  body: JSON.stringify({
+    access_key: requireEnv('WEB3FORMS_ACCESS_KEY'),
+    subject: `Nuevo lead: ${lead.nombre} — ${labelDe('estudio', lead.estudio)}`,
+    from_name: 'Landing Laboratorio Hospital Cristal',
+    // Destino configurado en el Dashboard, no en la clave de Web3Forms.
+    to: config.contacto.correo,
+    ...campos,
+  }),
+  signal: AbortSignal.timeout(10_000),
+});
+```
+
+> Web3Forms permite su clave en el cliente, pero enviarla en el bundle deja que
+> cualquiera use tu cuota para enviar correos con tu remitente. Desde el
+> servidor la clave no sale nunca.
+
+#### Llamada
+
+```ts
+const telUrl = `tel:${config.contacto.telefono}`;   // E.164 con `+`, válido en tel:
+window.location.href = telUrl;
+```
+
+> En escritorio `tel:` puede no hacer nada. El mensaje de éxito debe **mostrar el
+> número en texto**, para que se pueda marcar a mano.
+
+### 15.5 Google Apps Script — código exacto para desplegar
+
+**Paso 1.** Crea una hoja de cálculo en Google Sheets. El nombre da igual; las
+tres pestañas las crea el script solo.
+
+**Paso 2.** En esa hoja: **Extensiones → Apps Script**. Borra lo que haya y pega
+**exactamente** esto:
+
+```javascript
+/**
+ * Registro de leads de la landing del Laboratorio Clínico Hospital Cristal.
+ *
+ * Crea una pestaña por medio de contacto (WhatsApp, Correo, Llamada) y añade
+ * una fila por lead con las columnas: nombre, correo, telefono, servicio,
+ * medio, fecha.
+ */
+
+// Debe coincidir EXACTAMENTE con SHEETS_WEBHOOK_TOKEN en el proyecto.
+// Genera uno con: openssl rand -hex 32
+var TOKEN = 'PEGA_AQUI_TU_TOKEN';
+
+var HEADERS = ['nombre', 'correo', 'telefono', 'servicio', 'medio', 'fecha'];
+
+// El valor de `medio` que envía el sitio -> nombre de la pestaña.
+var SHEETS = {
+  whatsapp: 'WhatsApp',
+  correo: 'Correo',
+  llamada: 'Llamada'
+};
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return json({ ok: false, error: 'Sin cuerpo en la petición' });
+    }
+
+    var body = JSON.parse(e.postData.contents);
+
+    // La app web se despliega como "Cualquier persona", así que sin este
+    // control cualquiera podría escribir en la hoja.
+    if (body.token !== TOKEN) {
+      return json({ ok: false, error: 'No autorizado' });
+    }
+
+    var nombreHoja = SHEETS[String(body.medio || '').toLowerCase()];
+    if (!nombreHoja) {
+      return json({ ok: false, error: 'Medio desconocido: ' + body.medio });
+    }
+
+    // Un solo escritor a la vez: dos leads simultáneos podrían pisarse la fila.
+    var lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+
+    try {
+      var hoja = obtenerHoja(nombreHoja);
+      hoja.appendRow([
+        body.nombre || '',
+        body.correo || '',
+        body.telefono || '',
+        body.servicio || '',
+        body.medio || '',
+        body.fecha || new Date().toISOString()
+      ]);
+    } finally {
+      lock.releaseLock();
+    }
+
+    return json({ ok: true });
+  } catch (error) {
+    return json({ ok: false, error: String(error) });
+  }
+}
+
+/** Devuelve la pestaña, creándola con sus encabezados si no existe. */
+function obtenerHoja(nombre) {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = libro.getSheetByName(nombre);
+
+  if (!hoja) {
+    hoja = libro.insertSheet(nombre);
+  }
+
+  if (hoja.getLastRow() === 0) {
+    hoja.appendRow(HEADERS);
+    hoja.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
+    hoja.setFrozenRows(1);
+  }
+
+  return hoja;
+}
+
+function json(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Opcional: ejecútala una vez desde el editor para crear las tres pestañas. */
+function inicializar() {
+  for (var clave in SHEETS) {
+    obtenerHoja(SHEETS[clave]);
+  }
+}
+```
+
+**Paso 3.** Genera un token y pégalo en `var TOKEN`:
+
+```bash
+openssl rand -hex 32
+```
+
+**Paso 4.** Guarda (💾) y, opcionalmente, ejecuta la función `inicializar` una
+vez para ver las tres pestañas creadas. Google pedirá autorización: acéptala.
+
+**Paso 5.** **Implementar → Nueva implementación**:
+
+| Campo | Valor |
+|---|---|
+| Tipo | **Aplicación web** |
+| Descripción | `Leads landing laboratorio` |
+| Ejecutar como | **Yo** (tu cuenta) |
+| Quién tiene acceso | **Cualquier persona** |
+
+> «Cualquier persona» es obligatorio: el servidor de Vercel no puede iniciar
+> sesión con tu cuenta de Google. Por eso el `TOKEN` es lo único que protege el
+> endpoint — trátalo como una contraseña.
+
+**Paso 6.** Copia la **URL de la aplicación web**. Termina en `/exec`:
+
+```
+https://script.google.com/macros/s/AKfycb…/exec
+```
+
+**Paso 7.** Añade las tres variables a `.env` **y** a Vercel (Production y
+Preview). **Sin comillas**, como el resto del proyecto:
+
+```bash
+# .env
+SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/AKfycb…/exec
+SHEETS_WEBHOOK_TOKEN=el-mismo-token-del-paso-3
+WEB3FORMS_ACCESS_KEY=tu-access-key-de-web3forms
+```
+
+Añádelas también a `.env.example` (sin valores) y a la comprobación de
+`scripts/preflight.mjs`, junto al bloque de Cloudinary.
+
+> **Cada vez que edites el `.gs` hay que volver a implementar.** Apps Script
+> sirve la versión desplegada, no la guardada: en «Implementar → Gestionar
+> implementaciones» hay que editar la existente y elegir **Nueva versión**. Si se
+> crea una implementación nueva en lugar de una versión, **la URL cambia** y hay
+> que actualizar `SHEETS_WEBHOOK_URL`.
+
+**Paso 8.** Prueba el webhook antes de conectar nada:
+
+```bash
+curl -L -X POST "$SHEETS_WEBHOOK_URL" \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"TU_TOKEN","nombre":"Prueba","correo":"a@b.com",
+       "telefono":"+525512345678","servicio":"Check-up general",
+       "medio":"whatsapp","fecha":"2026-01-01T12:00:00.000Z"}'
+```
+
+> **`-L` es necesario**: Apps Script responde con una redirección 302 a
+> `googleusercontent.com` y el cuerpo real viaja ahí. Un cliente que no siga
+> redirecciones interpretará el 302 como fallo. `fetch` de Node las sigue por
+> defecto, pero conviene comprobarlo explícitamente en `sheets.ts`.
+
+Debe responder `{"ok":true}` y aparecer una fila en la pestaña **WhatsApp**.
+
+### 15.6 Cliente de Sheets — `src/lib/leads/sheets.ts`
+
+```ts
+export async function logLead(lead: LeadRecord): Promise<{ ok: boolean; error?: string }> {
+  const url = optionalEnv('SHEETS_WEBHOOK_URL');
+  const token = optionalEnv('SHEETS_WEBHOOK_TOKEN');
+
+  // Sin configurar no es un error: permite desarrollar sin escribir en la hoja
+  // real, igual que `VERCEL_DEPLOY_HOOK_URL` vacío en la Tanda 7.
+  if (!url || !token) return { ok: false, error: 'disabled' };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, ...lead }),
+      redirect: 'follow',              // Apps Script responde 302
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = await response.json();
+    return data?.ok ? { ok: true } : { ok: false, error: data?.error ?? 'respuesta inesperada' };
+  } catch (error) {
+    // NUNCA propagar: el lead ya está en MongoDB.
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+```
+
+### 15.7 Colección `leads` en MongoDB
+
+```jsonc
+{
+  "_id": ObjectId,
+  "nombre": "Ana García",
+  "medio": "whatsapp",
+  "telefono": "+525512345678",       // uno u otro, según el medio
+  "correo": null,
+  "motivo": "sintomas",               // se guarda el VALOR, estable
+  "estudio": "checkup",
+  "plazo": "inmediato",
+  "servicio": "Check-up general o preventivo (Biometría, Química, Orina)",  // etiqueta
+  "origen": "beneficios",             // sección desde la que se abrió el CTA
+  "consentimiento": true,
+  "consentimientoAt": ISODate,        // demostrable (ver C.1)
+  "sheetsOk": true,
+  "sheetsError": null,
+  "createdAt": ISODate,
+  "ip": "…"                           // solo para rate limit
+}
+```
+
+> **Guardar `value` Y `servicio` (etiqueta) no es redundante.** El valor sobrevive
+> a que el administrador reformule la opción; la etiqueta es lo que el cliente
+> eligió literalmente ese día, y es lo que tiene sentido en la hoja de cálculo.
+
+Índices en `scripts/ensure-indexes.ts`:
+
+```
+leads:      { createdAt: -1 }
+lead_rate:  { ip: 1 }, { expiresAt: 1 } TTL expireAfterSeconds: 0
+```
+
+### 15.8 Criterios de aceptación — Tanda 15
+
+- [ ] **`npm run budget` sigue pasando**: el JS inicial de `/` no crece.
+- [ ] El módulo del formulario se descarga **solo** al pulsar un CTA, y pesa
+      < 8 KB gz (medir aparte).
+- [ ] La pregunta de contacto permanece visible en los 3 pasos y conserva la
+      selección al navegar.
+- [ ] El campo de contacto cambia entre teléfono y correo según la preferencia,
+      **sin perder** lo ya escrito en el otro.
+- [ ] El botón final dice «Enviar WhatsApp» / «Enviar correo» / «Realizar
+      llamada» según la opción.
+- [ ] WhatsApp: abre la pestaña, limpia los campos y muestra el éxito en el modal.
+- [ ] Con el bloqueador de ventanas activo, aparece el **enlace manual** en vez de
+      fallar en silencio.
+- [ ] Correo: llega a la dirección configurada en el Dashboard.
+- [ ] Llamada: `tel:` se dispara y el número se muestra **también en texto**.
+- [ ] Los tres medios crean fila en **su** pestaña, con las 6 columnas.
+- [ ] Con `SHEETS_WEBHOOK_URL` vacía, el lead se guarda igual y se marca
+      `sheetsOk: false`.
+- [ ] Con el Apps Script caído, el visitante **no ve ningún error**.
+- [ ] Token incorrecto → el Apps Script responde `{"ok":false}` y no escribe.
+- [ ] Honeypot relleno → 200 y **sin** fila ni documento.
+- [ ] 6 envíos desde la misma IP en 10 min → el 6.º recibe **429**.
+- [ ] Sin consentimiento → **400**; el formulario no permite enviar.
+- [ ] `npm run a11y:html` en 15/15 y navegación completa del formulario **solo
+      con teclado**, incluido el movimiento de foco al cambiar de paso.
+- [ ] **`/aviso-de-privacidad` existe y el enlace del consentimiento funciona.**
+
 ---
 
 ## Apéndice A — Riesgos identificados y mitigación
@@ -2659,4 +3475,17 @@ código para que no se desincronice del repositorio:
 | `npm run a11y:contrast` | Ratios WCAG de los tokens en ambos temas. |
 | `npm run a11y:html` | 15 comprobaciones estructurales sobre el HTML generado. |
 | `npm run check:icons` | Que cada nombre del catálogo resuelva en `@lucide/astro` y en `lucide-react` (riesgo 43). |
-| `npm run db:indexes` · `db:seed` · `db:seed-images` · `db:seed-layout` · `db:migrate-icons` · `db:migrate-card-images` | Preparación y migraciones, todas idempotentes. |
+| `npm run db:indexes` · `db:seed` · `db:seed-images` · `db:seed-layout` · `db:seed-lead-form` · `db:migrate-icons` · `db:migrate-card-images` | Preparación y migraciones, todas idempotentes. |
+| 53 | **Datos de salud sin consentimiento expreso** | Incumple la LFPDPPP: el motivo de consulta y el tipo de estudio son datos sensibles (art. 3 fr. VI) | Casilla obligatoria sin marcar por defecto + `/aviso-de-privacidad` publicado + `consentimiento` y su fecha guardados con el lead. **Bloqueante de lanzamiento.** |
+| 54 | `/aviso-de-privacidad` inexistente | El footer enlaza a un 404 desde la Tanda 3, y el consentimiento apuntaría ahí | Crear la página con el texto que provea el cliente. No lo redacta el desarrollador. |
+| 55 | Formulario como island de React | 1.99 KB → ~68 KB en `/`: se invalida el requisito de rendimiento | Vanilla + `import()` dinámico al primer clic en un CTA. `npm run budget` lo verifica. |
+| 56 | `window.open` tras un `await` | El bloqueador lo corta: el lead se guarda pero WhatsApp no abre y el visitante cree que falló | Abrir la ventana SÍNCRONAMENTE en el clic y asignar la URL después, con enlace manual de respaldo. |
+| 57 | Teléfono guardado sin formato canónico | `55 1234 5678` produce una URL de WhatsApp que no abre ningún chat: fallo silencioso que solo se nota perdiendo leads | E.164 validado con Zod; se derivan las dos formas (con `+` para `tel:`, sin él para la API). |
+| 58 | Un fallo de Sheets aborta el envío | Se pierde un paciente porque una hoja de cálculo no respondió | MongoDB es la fuente de verdad; Sheets es secundario y su error se anota sin abortar. |
+| 59 | Emparejar respuestas por su TEXTO | Reformular una opción rompe el histórico de leads | `value` inmutable + `label` editable, como el `imageKey` de la Tanda 13. |
+| 60 | Endpoint público sin defensas | Spam, agotamiento de cuota de Web3Forms y basura en la hoja | Honeypot + tiempo mínimo + rate limit por IP con índice TTL + límite de tamaño. |
+| 61 | Clave de Web3Forms en el cliente | Cualquiera envía correos con tu remitente y consume tu cuota | Envío desde el servidor; la clave vive en `.env`. |
+| 62 | App web de Apps Script sin token | Está desplegada como "Cualquier persona": cualquiera escribiría en la hoja | Secreto compartido `SHEETS_WEBHOOK_TOKEN` verificado en `doPost`. |
+| 63 | Editar el `.gs` sin volver a implementar | Apps Script sirve la versión desplegada, no la guardada: el cambio no surte efecto | Implementar → Gestionar implementaciones → **Nueva versión** (crear una implementación nueva cambia la URL). |
+| 64 | Cliente HTTP que no sigue redirecciones | Apps Script responde 302 y el cuerpo viaja en la redirección; se interpretaría como fallo | `redirect: 'follow'` explícito y `curl -L` en la prueba. |
+| 65 | `cta.mode` sin valor por defecto | Las 8 secciones dejarían de validar y se serviría el contenido semilla | `.default('link')` hasta migrar, como con `icon` en la Tanda 12. |

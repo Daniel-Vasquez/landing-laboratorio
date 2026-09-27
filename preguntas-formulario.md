@@ -1,0 +1,29 @@
+- **Pregunta:** ¿Cómo prefieres que te contactemos?
+    - **Opciones:**
+        - WhatsApp *(opción recomendada/destacada)*
+        - Llamada telefónica
+        - Correo electrónico
+- **Pregunta:** ¿Cuál es el motivo principal de tu consulta hoy?
+    - **Tipo de campo:** Botón de selección única.
+    - **Opciones:**
+        - Chequeo preventivo de rutina (revisión general anual)
+        - Indicación u orden de mi médico
+        - Presento síntomas o malestar y quiero revisarme
+- **Pregunta:** ¿Qué tipo de estudio o perfil necesitas realizarte?
+    - **Tipo de campo:** Botón de selección única.
+    - **Opciones:**
+        - Check-up general o preventivo (Biometría, Química, Orina)
+        - Control de glucosa o diabetes (Hemoglobina glucosilada)
+        - Salud cardiovascular y colesterol (Perfil de lípidos)
+        - Perfiles hormonales o tiroideos
+        - Otro estudio especializado / Requiero orientación
+- **Pregunta:** ¿Para cuándo planeas realizarte tus estudios?
+    - **Tipo de campo:** Botón de selección única horizontal.
+    - **Opciones:**
+        - Lo antes posible (Hoy o mañana)
+        - Esta misma semana
+        - En los próximos 15 a 30 días
+        - Solo estoy cotizando por el momento
+- **Campos a solicitar:**
+    - **Nombre completo:** Campo de texto corto (Placeholder: *Ej. Ana García*).
+    - **Campo de contacto dinámico (según Paso 1):** Teléfono/WhatsApp (10 dígitos) o Correo electrónico.

@@ -255,6 +255,27 @@ async function database() {
     warn(`No se pudieron comprobar las ranuras de imagen: ${e.message}`);
   }
 
+  // Formulario de captación
+  try {
+    const doc = await db.collection('landing_config').findOne({ _id: 'lead_form' });
+    if (!doc) {
+      warn('No existe la configuración del formulario. Corre npm run db:seed-lead-form.');
+    } else {
+      const c = doc.contacto ?? {};
+      const faltan = ['whatsapp', 'telefono', 'correo'].filter((k) => !c[k]);
+      if (faltan.length) {
+        warn(
+          `El formulario no puede enviar: faltan destinos de contacto (${faltan.join(', ')}). ` +
+            'Rellénalos en /admin/formulario.',
+        );
+      } else {
+        ok('Destinos de contacto del formulario configurados.');
+      }
+    }
+  } catch (e) {
+    warn(`No se pudo comprobar el formulario: ${e.message}`);
+  }
+
   // Cuentas
   const users = await db.collection('user').countDocuments();
   if (users === 0)

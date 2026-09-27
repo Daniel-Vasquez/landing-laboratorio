@@ -1,0 +1,44 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import DbErrorBanner from '../../components/admin/DbErrorBanner.astro';
+import LeadFormEditor from '../../components/admin/LeadFormEditor.tsx';
+import { getLeadFormConfig } from '../../lib/leads/repository.ts';
+import { isMongoConfigured } from '../../lib/mongo.ts';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+
+let reachable = isMongoConfigured();
+let config;
+try {
+  const resolved = await getLeadFormConfig();
+  config = { contacto: resolved.contacto, preguntas: resolved.preguntas, textos: resolved.textos };
+} catch {
+  reachable = false;
+}
+---
+<AdminLayout
+  title="Formulario"
+  description="Contactos, textos y preguntas de captación"
+  user={user}
+>
+  {!reachable && (
+    <DbErrorBanner error="No se pudo leer la configuración del formulario. Lo que ves son los valores por defecto y el guardado fallará." />
+  )}
+
+  <div
+    role="note"
+    class="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-200"
+  >
+    <p class="font-semibold">Antes de publicar el formulario</p>
+    <p class="mt-1.5">
+      Dos de las preguntas recogen información sobre la salud de quien las responde. La ley
+      mexicana la considera un dato sensible y exige consentimiento expreso y un aviso de
+      privacidad accesible. Es necesario publicar la página del aviso y mantener marcada la
+      casilla de consentimiento en el formulario.
+    </p>
+  </div>
+
+  {config && <LeadFormEditor client:load initial={config} />}
+</AdminLayout>

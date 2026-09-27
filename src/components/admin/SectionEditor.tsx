@@ -316,6 +316,26 @@ export default function SectionEditor({
       );
     }
 
+    if (field.kind === 'select') {
+      const value = String(getPath(data, absolutePath) ?? field.options[0]?.value ?? '');
+      return (
+        <FieldShell key={absolutePath} id={id} label={field.label} hint={field.hint} error={error}>
+          <select
+            id={id}
+            value={value}
+            onChange={(e) => update(absolutePath, e.target.value)}
+            className={inputClass(Boolean(error))}
+          >
+            {field.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </FieldShell>
+      );
+    }
+
     if (field.kind === 'icon') {
       const value = getPath(data, absolutePath) as IconValue | undefined;
       return (

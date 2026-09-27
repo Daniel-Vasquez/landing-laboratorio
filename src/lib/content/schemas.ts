@@ -31,7 +31,16 @@ export type IconConfig = z.infer<typeof iconSchema>;
 
 const cta = z.object({
   label: z.string().min(1).max(60),
-  /** Ancla interna (`#agendar`) o URL absoluta (WhatsApp, tel:). */
+  /**
+   * `link` navega al `href`; `form` abre el formulario modal de captación.
+   *
+   * `.default('link')` es OBLIGATORIO: los 8 CTA ya guardados no tienen `mode`,
+   * y sin valor por defecto las 8 secciones dejarían de validar y
+   * `repository.ts` las sustituiría por el contenido semilla — el cliente vería
+   * revertirse su contenido real.
+   */
+  mode: z.enum(['link', 'form']).default('link'),
+  /** Ancla interna (`#agendar`) o URL absoluta. Solo se usa con `mode: 'link'`. */
   href: z.string().min(1).max(300),
 });
 

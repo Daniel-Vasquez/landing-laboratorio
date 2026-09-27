@@ -15,6 +15,8 @@ import {
   sectionConfigItemSchema,
   setSectionLayout,
 } from '../lib/sections/repository.ts';
+import { leadFormConfigSchema } from '../lib/leads/schemas.ts';
+import { setLeadFormConfig } from '../lib/leads/repository.ts';
 import {
   CARD_IMAGE_GROUPS,
   cardGroupFor,
@@ -309,6 +311,45 @@ export const server = {
 
         const deploy = await triggerDeploy({
           reason: `image:${slot.id}`,
+          actor: { name: user.name },
+        });
+
+        return { ok: true as const, savedAt: new Date().toISOString(), deploy };
+      },
+    }),
+  },
+
+  leadForm: {
+    /**
+     * Guarda contactos, textos y preguntas del formulario.
+     *
+     * El servidor normaliza: descarta preguntas fuera del registro y repone las
+     * opciones de las no editables. No existe action para crear ni eliminar
+     * preguntas — el conjunto vive en `leads/questions.ts`.
+     */
+    updateConfig: defineAction({
+      accept: 'json',
+      input: leadFormConfigSchema,
+      handler: async (config, context) => {
+        const user = requireUser(context.locals);
+
+        try {
+          await setLeadFormConfig(config, {
+            userId: user.id,
+            name: user.name,
+            email: user.email,
+          });
+        } catch (error) {
+          throw new ActionError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `No se pudo guardar la configuración: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        }
+
+        const deploy = await triggerDeploy({
+          reason: 'lead-form:config',
           actor: { name: user.name },
         });
 

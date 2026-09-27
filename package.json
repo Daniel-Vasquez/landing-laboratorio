@@ -20,7 +20,8 @@
     "budget": "node scripts/budget-check.mjs",
     "db:migrate-icons": "node --env-file=.env scripts/migrate-icons.ts",
     "dev:reset": "rm -rf node_modules/.vite node_modules/.vite-build .astro && astro dev",
-    "db:seed-layout": "node --env-file=.env scripts/seed-section-layout.ts"
+    "db:seed-layout": "node --env-file=.env scripts/seed-section-layout.ts",
+    "db:seed-lead-form": "node --env-file=.env scripts/seed-lead-form.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",
