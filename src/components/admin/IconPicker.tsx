@@ -28,6 +28,7 @@ export default function IconPicker({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
 
   const current: IconValue = value ?? {
     name: FALLBACK_ICON,
@@ -45,18 +46,44 @@ export default function IconPicker({
    * ya usa en la landing: reimplementarlo en React sería reintroducir errores
    * que el navegador ya resuelve.
    */
-  function open() {
+  function openDialog() {
     setQuery('');
     dialogRef.current?.showModal();
+    setOpen(true);
   }
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const onClose = () => triggerRef.current?.focus();
+    // `close` cubre las tres vías de cierre: botón, Escape y `close()`.
+    const onClose = () => {
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
     dialog.addEventListener('close', onClose);
     return () => dialog.removeEventListener('close', onClose);
   }, []);
+
+  /**
+   * Bloqueo del scroll de la página de fondo.
+   *
+   * `showModal()` vuelve inerte el resto del documento, pero NO impide de forma
+   * consistente entre navegadores que la rueda del ratón desplace la página
+   * detrás del modal. El bloqueo explícito lo garantiza.
+   *
+   * La limpieza restaura el valor PREVIO en lugar de fijar 'auto': si algún día
+   * otro componente deja su propio `overflow` puesto, escribir un valor
+   * arbitrario lo pisaría. Se ejecuta también al desmontar, así que cerrar la
+   * pestaña o navegar fuera no puede dejar la página sin scroll.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   const Preview = REACT_ICONS[current.name] ?? REACT_ICONS[FALLBACK_ICON];
 
@@ -78,7 +105,7 @@ export default function IconPicker({
       <button
         ref={triggerRef}
         type="button"
-        onClick={open}
+        onClick={openDialog}
         disabled={disabled}
         aria-haspopup="dialog"
         className="inline-flex items-center gap-3 rounded-lg border border-border-strong bg-bg px-3 py-2 text-sm text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
@@ -104,10 +131,21 @@ export default function IconPicker({
       <dialog
         ref={dialogRef}
         aria-label={`Seleccionar ${label.toLowerCase()}`}
-        className="w-[min(34rem,92vw)] rounded-2xl border border-border bg-surface p-0 text-fg backdrop:bg-black/50"
+        /*
+         * `m-auto` es imprescindible: el reset de Tailwind aplica `margin: 0` a
+         * `*`, y eso anula el `margin: auto` con el que el navegador centra un
+         * <dialog> modal. Sin esta clase el modal queda pegado arriba a la
+         * izquierda. Con ella vuelve al centro exacto, usando el
+         * `position: fixed; inset: 0` que ya aporta la hoja de estilos del
+         * navegador para `dialog:modal`.
+         *
+         * El alto máximo va AQUÍ, en el diálogo, no en un hijo: así la cabecera
+         * y el pie quedan fijos y solo desplaza la rejilla de iconos.
+         */
+        className="m-auto max-h-[90vh] w-[min(34rem,92vw)] overflow-hidden rounded-2xl border border-border bg-surface p-0 text-fg backdrop:bg-black/50"
       >
-        <div className="flex max-h-[80vh] flex-col">
-          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+        <div className="flex max-h-[90vh] flex-col">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-4">
             <h2 className="text-base font-semibold">Seleccionar icono</h2>
             <button
               type="button"
@@ -121,7 +159,9 @@ export default function IconPicker({
             </button>
           </div>
 
-          <div className="space-y-4 overflow-y-auto p-4">
+          {/* `min-h-0`: sin él, un hijo flex no se encoge por debajo de su
+              contenido y `overflow-y-auto` nunca llega a activarse. */}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             <div>
               <label htmlFor="icon-search" className="mb-1.5 block text-sm font-medium text-fg">
                 Buscar
@@ -197,7 +237,7 @@ export default function IconPicker({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border p-4">
             <p className="text-xs text-fg-muted">
               {ratio !== null && `Contraste ${ratio.toFixed(2)}:1`}
               {lowContrast && ' · se verá muy tenue'}
