@@ -21,6 +21,11 @@ const run = async () => {
     // TTL: MongoDB purga las sesiones expiradas solo, sin cron propio.
     ['session', await db.collection('session').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })],
     ['account', await db.collection('account').createIndex({ userId: 1 })],
+    // Leads: consultas por fecha descendente desde el panel (futuro).
+    ['leads', await db.collection('leads').createIndex({ createdAt: -1 })],
+    // Rate limit del formulario público. El TTL purga solo, sin cron propio.
+    ['lead_rate', await db.collection('lead_rate').createIndex({ ip: 1, createdAt: -1 })],
+    ['lead_rate', await db.collection('lead_rate').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })],
   ] as const;
 
   for (const [collection, name] of results) {

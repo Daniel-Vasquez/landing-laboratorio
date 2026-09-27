@@ -64,13 +64,15 @@ const { items, cta } = Astro.props;
       ))}
     </nav>
 
-    <a
-      href={cta.href}
+    <button
+      type="button"
+      data-lead-form
+      data-servicio="menu-movil"
       data-nav-link
       class="mt-auto rounded-lg bg-primary px-4 py-3 text-center text-base font-semibold text-primary-fg transition-colors hover:bg-primary-hover"
     >
       {cta.label}
-    </a>
+    </button>
   </div>
 </dialog>
 

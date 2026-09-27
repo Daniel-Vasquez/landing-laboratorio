@@ -41,12 +41,16 @@ const { menu } = Astro.props;
 
     <div class="ml-auto flex items-center gap-2 md:ml-0">
       <ThemeToggle />
-      <a
-        href={NAV_CTA.href}
+      <!-- Botón, no enlace: en /aviso-de-privacidad el ancla #agendar no
+           existe, así que como <a> sería un enlace muerto. -->
+      <button
+        type="button"
+        data-lead-form
+        data-servicio="header"
         class="hidden rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover md:inline-flex"
       >
         {NAV_CTA.label}
-      </a>
+      </button>
       <MobileNav items={menu} cta={NAV_CTA} />
     </div>
   </div>

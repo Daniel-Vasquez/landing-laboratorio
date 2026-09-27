@@ -139,3 +139,69 @@ export async function setLeadFormConfig(
 
   await recordChange({ ...editor, sectionKey: 'cta_final', at: now });
 }
+
+/** Documento de la colección `leads`. */
+export type LeadRecord = {
+  nombre: string;
+  medio: 'whatsapp' | 'llamada' | 'correo';
+  telefono: string | null;
+  correo: string | null;
+  /** Códigos estables de las respuestas. */
+  motivo: string;
+  estudio: string;
+  plazo: string;
+  /** Etiquetas tal como las vio el visitante ese día. */
+  motivoLabel: string;
+  estudioLabel: string;
+  plazoLabel: string;
+  origen: string;
+  consentimiento: true;
+  consentimientoAt: Date;
+  sheetsOk: boolean;
+  sheetsError: string | null;
+  createdAt: Date;
+  ip: string | null;
+};
+
+export async function saveLead(lead: LeadRecord): Promise<void> {
+  const db = await getDb();
+  await db.collection<LeadRecord>('leads').insertOne(lead);
+}
+
+/**
+ * Límite por IP: 5 envíos cada 10 minutos.
+ *
+ * El endpoint es público, así que sin esto alguien podría llenar la hoja de
+ * cálculo y agotar la cuota de Web3Forms en minutos. El índice TTL de
+ * `lead_rate` purga los registros solo, sin cron propio.
+ */
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_MAX = 5;
+
+export async function checkRateLimit(ip: string): Promise<{ allowed: boolean }> {
+  if (!ip) return { allowed: true };
+
+  const db = await getDb();
+  const collection = db.collection('lead_rate');
+  const now = new Date();
+
+  const recent = await collection.countDocuments({
+    ip,
+    createdAt: { $gte: new Date(now.getTime() - RATE_WINDOW_MS) },
+  });
+
+  if (recent >= RATE_MAX) return { allowed: false };
+
+  await collection.insertOne({
+    ip,
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + RATE_WINDOW_MS),
+  });
+  return { allowed: true };
+}
+
+/** Etiqueta visible de una opción, para registrarla junto a su código. */
+export function optionLabel(config: ResolvedLeadForm, questionId: QuestionId, value: string): string {
+  const option = config.preguntas[questionId]?.options.find((o) => o.value === value);
+  return option?.label ?? value;
+}
