@@ -6,9 +6,20 @@
  * medio, fecha.
  */
 
-// Debe coincidir EXACTAMENTE con SHEETS_WEBHOOK_TOKEN en el proyecto.
-// Genera uno con: openssl rand -hex 32
-var TOKEN = 'PEGA_AQUI_TU_TOKEN';
+/**
+ * El token se lee de las PROPIEDADES DEL SCRIPT, no del código.
+ *
+ * Configúralo en: ⚙️ Configuración del proyecto -> Propiedades del script
+ *   Propiedad: TOKEN
+ *   Valor:     el mismo que SHEETS_WEBHOOK_TOKEN en tu .env y en Vercel
+ *
+ * Así el secreto no vive en un archivo versionado. Escribirlo aquí lo pondría
+ * a un `git add` de acabar en el historial, de donde ya no se borra con un
+ * commit: habría que reescribir la historia y rotar el token igualmente.
+ */
+function obtenerToken() {
+  return PropertiesService.getScriptProperties().getProperty('TOKEN');
+}
 
 var HEADERS = ['nombre', 'correo', 'telefono', 'servicio', 'medio', 'fecha'];
 
@@ -29,7 +40,11 @@ function doPost(e) {
 
     // La app web se despliega como "Cualquier persona", así que sin este
     // control cualquiera podría escribir en la hoja.
-    if (body.token !== TOKEN) {
+    var token = obtenerToken();
+    if (!token) {
+      return json({ ok: false, error: 'Falta la propiedad TOKEN en el script' });
+    }
+    if (body.token !== token) {
       return json({ ok: false, error: 'No autorizado' });
     }
 

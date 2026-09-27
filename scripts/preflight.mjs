@@ -170,6 +170,35 @@ function avisoPrivacidad() {
   ok('Aviso de privacidad sin marcadores pendientes.');
 }
 
+/**
+ * El Apps Script versionado no debe contener secretos.
+ *
+ * Es un archivo que git sigue: un token pegado ahí queda a un `git add` de
+ * entrar en el historial, de donde no se borra con un commit —habría que
+ * reescribir la historia y rotarlo igualmente—. El token vive en las
+ * propiedades del script, en la interfaz de Apps Script.
+ */
+function appsScriptSinSecretos() {
+  const ruta = 'scripts/apps-script/leads.gs';
+  let contenido;
+  try {
+    contenido = readFileSync(ruta, 'utf8');
+  } catch {
+    return; // el archivo es opcional
+  }
+
+  const token = process.env.SHEETS_WEBHOOK_TOKEN;
+  if (token && contenido.includes(token)) {
+    err(`${ruta} contiene tu SHEETS_WEBHOOK_TOKEN. Quítalo: el token va en las propiedades del script.`);
+    return;
+  }
+  if (/[0-9a-f]{32,}/.test(contenido)) {
+    err(`${ruta} parece contener un secreto escrito en el código.`);
+    return;
+  }
+  ok('El Apps Script versionado no contiene secretos.');
+}
+
 function deployHook() {
   const hook = process.env.VERCEL_DEPLOY_HOOK_URL;
   const env = process.env.VERCEL_ENV;
@@ -331,6 +360,7 @@ noPublicSecrets();
 signupGate();
 cloudinary();
 avisoPrivacidad();
+appsScriptSinSecretos();
 deployHook();
 await database();
 

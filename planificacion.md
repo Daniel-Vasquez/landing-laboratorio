@@ -3148,9 +3148,11 @@ tres pestañas las crea el script solo.
  * medio, fecha.
  */
 
-// Debe coincidir EXACTAMENTE con SHEETS_WEBHOOK_TOKEN en el proyecto.
-// Genera uno con: openssl rand -hex 32
-var TOKEN = 'PEGA_AQUI_TU_TOKEN';
+// El token se lee de las PROPIEDADES DEL SCRIPT, nunca del código:
+// ⚙️ Configuración del proyecto -> Propiedades del script -> TOKEN
+function obtenerToken() {
+  return PropertiesService.getScriptProperties().getProperty('TOKEN');
+}
 
 var HEADERS = ['nombre', 'correo', 'telefono', 'servicio', 'medio', 'fecha'];
 
@@ -3236,11 +3238,20 @@ function inicializar() {
 }
 ```
 
-**Paso 3.** Genera un token y pégalo en `var TOKEN`:
+**Paso 3.** Genera un token y guárdalo en las **propiedades del script**, no en
+el código:
 
 ```bash
 openssl rand -hex 32
 ```
+
+En el editor: **⚙️ Configuración del proyecto → Propiedades del script → Añadir
+propiedad** → nombre `TOKEN`, valor el que acabas de generar.
+
+> **Nunca escribas el token dentro del `.gs`.** Ese archivo está versionado en
+> `scripts/apps-script/leads.gs`: un secreto ahí queda a un `git add` de entrar
+> en el historial, de donde no se quita con un commit —hay que reescribir la
+> historia y rotarlo igualmente—. `npm run preflight` falla si lo detecta.
 
 **Paso 4.** Guarda (💾) y, opcionalmente, ejecuta la función `inicializar` una
 vez para ver las tres pestañas creadas. Google pedirá autorización: acéptala.
