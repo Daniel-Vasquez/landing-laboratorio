@@ -4,8 +4,14 @@ import Section from './Section.astro';
 
 interface Props {
   data: LandingContent['videos'];
+  /**
+   * Fondo alterno. Lo decide `index.astro` por POSICIÓN RENDERIZADA, no el
+   * componente: al reordenar u ocultar secciones, un tono fijo aquí dejaría
+   * dos bandas `muted` contiguas.
+   */
+  tone?: 'base' | 'muted';
 }
-const { data } = Astro.props;
+const { data, tone = 'base' } = Astro.props;
 
 /**
  * Patrón "facade": tarjetas estáticas que enlazan a Instagram, NO el embed
@@ -21,7 +27,7 @@ const { data } = Astro.props;
  */
 ---
 {data.items.length > 0 && (
-  <Section id="videos" eyebrow={data.eyebrow} title="Conoce nuestro laboratorio">
+  <Section id="videos" tone={tone} eyebrow={data.eyebrow} title="Conoce nuestro laboratorio">
     {data.intro && <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>}
 
     <ul class="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

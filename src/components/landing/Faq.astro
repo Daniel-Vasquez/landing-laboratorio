@@ -8,8 +8,13 @@ import Button from '../ui/Button.astro';
 interface Props {
   data: LandingContent['faq'];
   images: LandingImages;
+  /**
+   * Con imagen de fondo el tono no pinta un color plano: elige el TOKEN del
+   * scrim, que es lo que preserva el contraste AA medido en la Tanda 9.
+   */
+  tone?: 'base' | 'muted';
 }
-const { data, images } = Astro.props;
+const { data, images, tone = 'base' } = Astro.props;
 
 const slot = getSlot('faq-fondo')!;
 const background = images[slot.id];
@@ -56,7 +61,13 @@ const backgroundHeight = Math.round((slot.displayWidth * 9) / 16);
       />
     )
   }
-  <div class="absolute inset-0 -z-10 bg-surface-muted/92" aria-hidden="true"></div>
+  <div
+    class:list={[
+      'absolute inset-0 -z-10',
+      tone === 'muted' ? 'bg-surface-muted/92' : 'bg-bg/92',
+    ]}
+    aria-hidden="true"
+  ></div>
 
   <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:py-24">
     <p class="text-sm font-semibold uppercase tracking-wide text-accent">{data.eyebrow}</p>

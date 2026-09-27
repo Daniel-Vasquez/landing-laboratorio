@@ -5,8 +5,14 @@ import Button from '../ui/Button.astro';
 
 interface Props {
   data: LandingContent['testimonios'];
+  /**
+   * Fondo alterno. Lo decide `index.astro` por POSICIÓN RENDERIZADA, no el
+   * componente: al reordenar u ocultar secciones, un tono fijo aquí dejaría
+   * dos bandas `muted` contiguas.
+   */
+  tone?: 'base' | 'muted';
 }
-const { data } = Astro.props;
+const { data, tone = 'base' } = Astro.props;
 
 function initials(name: string): string {
   return name
@@ -17,7 +23,7 @@ function initials(name: string): string {
     .join('');
 }
 ---
-<Section id="testimonios" tone="muted" eyebrow={data.eyebrow} title="Pacientes que ya nos eligieron">
+<Section id="testimonios" tone={tone} eyebrow={data.eyebrow} title="Pacientes que ya nos eligieron">
   <ul class="mt-10 grid gap-4 lg:grid-cols-3">
     {data.items.map((item) => (
       <li class="flex flex-col rounded-xl border border-border bg-surface p-6">

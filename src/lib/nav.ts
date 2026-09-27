@@ -1,15 +1,18 @@
+import type { ResolvedSection } from './sections/repository.ts';
+
 export type NavItem = { label: string; href: string };
 
 /**
- * Anclas de la landing. Los `href` deben coincidir con los `id` que emiten
- * los componentes de sección (Tanda 3).
+ * El menú ya NO está hardcodeado: se deriva del mismo orden que dicta MongoDB.
+ *
+ * Se omiten las secciones ocultas (su ancla no existe en el HTML, así que el
+ * enlace sería muerto) y las marcadas `inMenu: false` — el hero, al que ya
+ * lleva el logo, y el CTA final, al que apuntan los 8 botones.
  */
-export const NAV_ITEMS: NavItem[] = [
-  { label: 'Estudios', href: '#estudios' },
-  { label: '¿Por qué estudios?', href: '#por-que' },
-  { label: 'Adicionales', href: '#adicionales' },
-  { label: 'Beneficios', href: '#beneficios' },
-  { label: 'Preguntas', href: '#faq' },
-];
+export function buildNavItems(layout: ResolvedSection[]): NavItem[] {
+  return layout
+    .filter((section) => section.visible && section.inMenu)
+    .map((section) => ({ label: section.menuTitle, href: `#${section.anchor}` }));
+}
 
 export const NAV_CTA: NavItem = { label: 'Agenda tu estudio', href: '#agendar' };

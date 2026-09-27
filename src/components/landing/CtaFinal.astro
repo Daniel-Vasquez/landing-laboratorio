@@ -9,11 +9,13 @@ interface Props {
   data: LandingContent['cta_final'];
   address: string;
   images: LandingImages;
+  /** Fondo alterno; lo decide `index.astro` por posición renderizada. */
+  tone?: 'base' | 'muted';
 }
-const { data, address, images } = Astro.props;
+const { data, address, images, tone = 'base' } = Astro.props;
 const slot = getSlot('cta-final')!;
 ---
-<section id="agendar" class="scroll-mt-16 bg-bg">
+<section id="agendar" class:list={['scroll-mt-16', tone === 'muted' ? 'border-y border-border bg-surface-muted' : 'bg-bg']}>
   <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:py-24">
     <div class="rounded-2xl border border-border bg-surface p-8 sm:p-12">
       <div class="grid items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-14">

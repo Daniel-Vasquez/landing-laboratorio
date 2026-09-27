@@ -8,11 +8,13 @@ import AsideFigure from './AsideFigure.astro';
 interface Props {
   data: LandingContent['hero'];
   images: LandingImages;
+  /** Fondo alterno; lo decide `index.astro` por posición renderizada. */
+  tone?: 'base' | 'muted';
 }
-const { data, images } = Astro.props;
+const { data, images, tone = 'base' } = Astro.props;
 const slot = getSlot('hero')!;
 ---
-<section id="inicio" class="bg-bg">
+<section id="inicio" class:list={[tone === 'muted' ? 'border-y border-border bg-surface-muted' : 'bg-bg']}>
   <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:py-28">
     <!--
       `lg:items-center` y no `items-start`: con el texto más alto que la imagen,

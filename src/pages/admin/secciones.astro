@@ -1,0 +1,45 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import DbErrorBanner from '../../components/admin/DbErrorBanner.astro';
+import SectionLayoutEditor from '../../components/admin/SectionLayoutEditor.tsx';
+import { getSectionLayoutForAdmin } from '../../lib/sections/repository.ts';
+import { isMongoConfigured } from '../../lib/mongo.ts';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+
+let reachable = isMongoConfigured();
+let items: Awaited<ReturnType<typeof getSectionLayoutForAdmin>> = [];
+try {
+  items = await getSectionLayoutForAdmin();
+} catch {
+  reachable = false;
+}
+---
+<AdminLayout title="Secciones" description="Orden y visibilidad de la landing" user={user}>
+  {!reachable && (
+    <DbErrorBanner error="No se pudo leer la configuración de secciones. Lo que ves es el orden por defecto y el guardado fallará." />
+  )}
+
+  <p class="mb-4 max-w-3xl text-sm text-fg-muted">
+    Arrastra las secciones para reordenarlas, o usa las flechas. El interruptor oculta o muestra
+    una sección en la web pública. El menú de navegación se genera con este mismo orden.
+  </p>
+
+  <SectionLayoutEditor client:load initial={items} />
+
+  <div class="mt-6 rounded-xl border border-border bg-surface p-4">
+    <p class="text-sm font-semibold text-fg">Dos secciones tienen posición fija</p>
+    <ul class="mt-2 space-y-1.5 text-sm text-fg-muted">
+      <li>
+        <strong class="font-medium text-fg">Inicio</strong> contiene el único título principal
+        de la página. Ocultarlo dejaría la web sin él y perjudicaría su posicionamiento en Google.
+      </li>
+      <li>
+        <strong class="font-medium text-fg">Agenda</strong> es el destino de los 8 botones
+        «Agenda tu estudio». Ocultarla dejaría esos botones sin adónde llevar.
+      </li>
+    </ul>
+  </div>
+</AdminLayout>

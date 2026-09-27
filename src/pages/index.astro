@@ -20,11 +20,39 @@ import CtaFinal from '../components/landing/CtaFinal.astro';
 import { getLandingContent } from '../lib/content/repository.ts';
 import { getLandingImages } from '../lib/images/repository.ts';
 import { buildJsonLd } from '../lib/seo.ts';
+import { getSectionLayout } from '../lib/sections/repository.ts';
+import { buildNavItems } from '../lib/nav.ts';
 
 export const prerender = true;
 
-// Dos queries en total: una para el contenido, una para las imágenes.
-const [content, images] = await Promise.all([getLandingContent(), getLandingImages()]);
+// Tres queries en total: contenido, imágenes y configuración de secciones.
+const [content, images, layout] = await Promise.all([
+  getLandingContent(),
+  getLandingImages(),
+  getSectionLayout(),
+]);
+
+/**
+ * Mapa clave -> componente.
+ *
+ * Los imports siguen siendo ESTÁTICOS: Astro no puede hacer tree-shaking de un
+ * import dinámico por nombre, y el registro de `sections/registry.ts` garantiza
+ * que toda clave renderizable tiene entrada aquí.
+ */
+const COMPONENTS = {
+  hero: Hero,
+  estudios_principales: EstudiosPrincipales,
+  por_que_estudios: PorQueEstudios,
+  estudios_adicionales: EstudiosAdicionales,
+  por_que_hospital: PorQueHospital,
+  testimonios: Testimonios,
+  videos: Videos,
+  faq: Faq,
+  cta_final: CtaFinal,
+} as const;
+
+const visibleSections = layout.filter((section) => section.visible);
+const menu = buildNavItems(layout);
 const siteUrl = (Astro.site ?? new URL('http://localhost:4321')).href;
 const jsonLd = buildJsonLd(content, siteUrl);
 ---
@@ -33,14 +61,39 @@ const jsonLd = buildJsonLd(content, siteUrl);
   avisos={content.avisos}
   address={content.hero.address}
   jsonLd={jsonLd}
+  menu={menu}
 >
-  <Hero data={content.hero} images={images} />
-  <EstudiosPrincipales data={content.estudios_principales} images={images} />
-  <PorQueEstudios data={content.por_que_estudios} images={images} />
-  <EstudiosAdicionales data={content.estudios_adicionales} />
-  <PorQueHospital data={content.por_que_hospital} />
-  <Testimonios data={content.testimonios} />
-  <Videos data={content.videos} />
-  <Faq data={content.faq} images={images} />
-  <CtaFinal data={content.cta_final} address={content.hero.address} images={images} />
+  {
+    visibleSections.map((section, index) => {
+      /*
+       * Cast acotado a este único punto.
+       *
+       * TypeScript no puede emparejar cada clave con su tipo de datos en un
+       * mapa dinámico: ve la UNIÓN de los nueve `data` frente a la
+       * INTERSECCIÓN de las nueve firmas de props, y las rechaza.
+       *
+       * Lo que garantiza la corrección no es el tipo aquí, sino que
+       * `sections/registry.ts` y `COMPONENTS` se indexan con las mismas claves:
+       * `RenderableKey` se deriva del registro, así que añadir una sección sin
+       * su componente —u olvidar quitarla— sí falla en compilación, en la
+       * declaración de `COMPONENTS`.
+       */
+      const Component = COMPONENTS[section.key] as unknown as (props: Record<string, unknown>) => unknown;
+      /*
+       * La alternancia de fondos se calcula por POSICIÓN RENDERIZADA, no dentro
+       * del componente. Con el orden fijo daba igual; al reordenar u ocultar,
+       * dos secciones `muted` podrían quedar contiguas y la landing mostraría
+       * una banda doble sin separación.
+       */
+      const tone = index % 2 === 0 ? 'base' : 'muted';
+      return (
+        <Component
+          data={content[section.key]}
+          images={images}
+          address={content.hero.address}
+          tone={tone}
+        />
+      );
+    })
+  }
 </LandingLayout>

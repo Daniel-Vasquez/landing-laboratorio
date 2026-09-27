@@ -6,8 +6,14 @@ import Icon from './Icon.astro';
 
 interface Props {
   data: LandingContent['por_que_hospital'];
+  /**
+   * Fondo alterno. Lo decide `index.astro` por POSICIÓN RENDERIZADA, no el
+   * componente: al reordenar u ocultar secciones, un tono fijo aquí dejaría
+   * dos bandas `muted` contiguas.
+   */
+  tone?: 'base' | 'muted';
 }
-const { data } = Astro.props;
+const { data, tone = 'base' } = Astro.props;
 
 /**
  * Iconos por defecto mientras un beneficio no tenga `icon` configurado.
@@ -23,7 +29,7 @@ const fallbackIcons = [
   'hospital',
 ];
 ---
-<Section id="beneficios" eyebrow="Ventajas" title={data.eyebrow}>
+<Section id="beneficios" tone={tone} eyebrow="Ventajas" title={data.eyebrow}>
   <ul class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     {data.beneficios.map((beneficio, i) => (
       <li class="rounded-xl border border-border bg-surface p-6">

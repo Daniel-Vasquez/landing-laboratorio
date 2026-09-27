@@ -1,7 +1,12 @@
 ---
 import ThemeToggle from '../ui/ThemeToggle.astro';
 import MobileNav from '../ui/MobileNav.astro';
-import { NAV_ITEMS, NAV_CTA } from '../../lib/nav';
+import { NAV_CTA, type NavItem } from '../../lib/nav';
+
+interface Props {
+  menu: NavItem[];
+}
+const { menu } = Astro.props;
 ---
 <header
   class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70"
@@ -24,7 +29,7 @@ import { NAV_ITEMS, NAV_CTA } from '../../lib/nav';
     </a>
 
     <nav aria-label="Navegación principal" class="ml-auto hidden items-center gap-1 md:flex">
-      {NAV_ITEMS.map((item) => (
+      {menu.map((item) => (
         <a
           href={item.href}
           class="rounded-md px-3 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
@@ -42,7 +47,7 @@ import { NAV_ITEMS, NAV_CTA } from '../../lib/nav';
       >
         {NAV_CTA.label}
       </a>
-      <MobileNav items={NAV_ITEMS} cta={NAV_CTA} />
+      <MobileNav items={menu} cta={NAV_CTA} />
     </div>
   </div>
 </header>

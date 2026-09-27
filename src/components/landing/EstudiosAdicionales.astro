@@ -6,10 +6,16 @@ import Icon from './Icon.astro';
 
 interface Props {
   data: LandingContent['estudios_adicionales'];
+  /**
+   * Fondo alterno. Lo decide `index.astro` por POSICIÓN RENDERIZADA, no el
+   * componente: al reordenar u ocultar secciones, un tono fijo aquí dejaría
+   * dos bandas `muted` contiguas.
+   */
+  tone?: 'base' | 'muted';
 }
-const { data } = Astro.props;
+const { data, tone = 'base' } = Astro.props;
 ---
-<Section id="adicionales" tone="muted" eyebrow={data.eyebrow} title="Cobertura para cualquier necesidad médica">
+<Section id="adicionales" tone={tone} eyebrow={data.eyebrow} title="Cobertura para cualquier necesidad médica">
   <p class="mt-5 max-w-3xl text-fg-muted">{data.intro}</p>
 
   <ul class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

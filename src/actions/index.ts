@@ -12,6 +12,10 @@ import { getSection, setSection } from '../lib/content/repository.ts';
 import { getDeployState, triggerDeploy } from '../lib/deploy.ts';
 import { getSlot, isSlotId } from '../lib/images/slots.ts';
 import {
+  sectionConfigItemSchema,
+  setSectionLayout,
+} from '../lib/sections/repository.ts';
+import {
   CARD_IMAGE_GROUPS,
   cardGroupFor,
   cardPublicId,
@@ -305,6 +309,49 @@ export const server = {
 
         const deploy = await triggerDeploy({
           reason: `image:${slot.id}`,
+          actor: { name: user.name },
+        });
+
+        return { ok: true as const, savedAt: new Date().toISOString(), deploy };
+      },
+    }),
+  },
+
+  sections: {
+    /**
+     * Guarda orden, visibilidad y títulos del menú.
+     *
+     * El servidor NORMALIZA: descarta claves fuera del registro, fuerza
+     * `isVisible: true` en las secciones fijas y recalcula `orden` desde el
+     * índice del array. Así, un POST directo que intente ocultar el hero o
+     * mover el CTA final no puede dejar la landing sin <h1> ni con ocho
+     * enlaces muertos.
+     */
+    updateLayout: defineAction({
+      accept: 'json',
+      input: z.object({
+        items: z.array(sectionConfigItemSchema).min(1).max(20),
+      }),
+      handler: async ({ items }, context) => {
+        const user = requireUser(context.locals);
+
+        try {
+          await setSectionLayout(items, {
+            userId: user.id,
+            name: user.name,
+            email: user.email,
+          });
+        } catch (error) {
+          throw new ActionError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `No se pudo guardar el orden: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        }
+
+        const deploy = await triggerDeploy({
+          reason: 'sections:layout',
           actor: { name: user.name },
         });
 

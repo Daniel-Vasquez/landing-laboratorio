@@ -4,6 +4,7 @@ import ThemeScript from '../components/ui/ThemeScript.astro';
 import Header from '../components/landing/Header.astro';
 import Footer from '../components/landing/Footer.astro';
 import type { LandingContent } from '../lib/content/schemas.ts';
+import type { NavItem } from '../lib/nav.ts';
 
 interface Props {
   seo: LandingContent['seo'];
@@ -11,10 +12,12 @@ interface Props {
   address: string;
   /** Objeto JSON-LD ya construido. Se serializa aquí. */
   jsonLd?: unknown;
+  /** Menú derivado del orden de secciones. */
+  menu: NavItem[];
   ogImage?: string;
 }
 
-const { seo, avisos, address, jsonLd, ogImage = '/og-default.png' } = Astro.props;
+const { seo, avisos, address, jsonLd, menu, ogImage = '/og-default.png' } = Astro.props;
 
 // `Astro.site` viene de `site` en astro.config.mjs (PUBLIC_SITE_URL).
 const canonical = new URL(Astro.url.pathname, Astro.site ?? 'http://localhost:4321');
@@ -65,7 +68,7 @@ const fullTitle = seo.title.includes('Hospital Cristal')
       Saltar al contenido principal
     </a>
 
-    <Header />
+    <Header menu={menu} />
 
     <main id="contenido">
       <slot />
