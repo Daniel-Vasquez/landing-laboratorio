@@ -11,6 +11,7 @@
  *
  * Salida: código 1 si hay errores, 0 si solo hay avisos.
  */
+import { readFileSync } from 'node:fs';
 import { normalizeUrlEnv } from '../src/lib/env.ts';
 
 const PROD = process.argv.includes('--prod');
@@ -133,6 +134,40 @@ function signupGate() {
   else if (open && PROD) warn('Registro abierto en producción, protegido solo por el código de invitación.');
   else if (open) warn('Registro abierto (aceptable en local; ciérralo antes de producción).');
   else ok('Registro público cerrado.');
+}
+
+/**
+ * El aviso de privacidad no puede publicarse con marcadores sin rellenar.
+ *
+ * Es un documento legal: un aviso que dice "[RAZÓN SOCIAL DEL HOSPITAL]" no
+ * cumple el art. 16 de la LFPDPPP, y además el formulario de captación enlaza
+ * a él desde su casilla de consentimiento.
+ */
+function avisoPrivacidad() {
+  const ruta = 'src/pages/aviso-de-privacidad.astro';
+  let contenido;
+  try {
+    contenido = readFileSync(ruta, 'utf8');
+  } catch {
+    err(`Falta ${ruta}. El consentimiento del formulario enlaza a esa página.`);
+    return;
+  }
+
+  /*
+   * Un marcador empieza por MAYÚSCULA y tiene al menos 4 caracteres.
+   * Esa forma lo distingue de las clases arbitrarias de Tailwind
+   * (`max-h-[90vh]`, `w-[min(34rem,92vw)]`), que empiezan por minúscula o
+   * dígito, así que no producen falsos positivos.
+   */
+  const marcadores = [...contenido.matchAll(/\[[A-ZÁÉÍÓÚÑ][^\]\n]{3,}\]/g)].map((m) => m[0]);
+
+  if (marcadores.length > 0) {
+    const lista = [...new Set(marcadores)].join(', ');
+    if (PROD) err(`El aviso de privacidad tiene marcadores sin rellenar: ${lista}`);
+    else warn(`El aviso de privacidad tiene marcadores sin rellenar: ${lista}`);
+    return;
+  }
+  ok('Aviso de privacidad sin marcadores pendientes.');
 }
 
 function deployHook() {
@@ -295,6 +330,7 @@ secretStrength();
 noPublicSecrets();
 signupGate();
 cloudinary();
+avisoPrivacidad();
 deployHook();
 await database();
 

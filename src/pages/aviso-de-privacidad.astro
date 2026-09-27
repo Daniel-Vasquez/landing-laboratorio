@@ -1,0 +1,231 @@
+---
+/**
+ * Aviso de privacidad — LFPDPPP.
+ *
+ * EL TEXTO VIVE EN EL REPOSITORIO, NO EN MONGODB, a diferencia del resto del
+ * contenido. Motivo: es un documento legal. Git deja constancia de qué versión
+ * estuvo publicada en cada fecha, que es justo lo que hay que poder demostrar
+ * si alguien reclama; y no es algo que un operador deba editar sin revisión.
+ *
+ * ⚠️ LOS CAMPOS ENTRE CORCHETES SON MARCADORES. Este aviso NO se puede publicar
+ * hasta que el cliente (o su asesor legal) los sustituya por los datos reales.
+ * `npm run preflight` avisa mientras queden marcadores sin rellenar.
+ */
+import LandingLayout from '../layouts/LandingLayout.astro';
+import { getLandingContent } from '../lib/content/repository.ts';
+import { getSectionLayout } from '../lib/sections/repository.ts';
+import { buildNavItems } from '../lib/nav.ts';
+
+export const prerender = true;
+
+const [content, layout] = await Promise.all([getLandingContent(), getSectionLayout()]);
+const menu = buildNavItems(layout);
+
+/** Fecha de la última revisión del texto. Actualizar al modificarlo. */
+const ultimaActualizacion = '27 de septiembre de 2026';
+
+const responsable = {
+  razonSocial: '[RAZÓN SOCIAL DEL HOSPITAL]',
+  nombreComercial: 'Laboratorio Clínico Hospital Cristal',
+  domicilio: 'Melchor Ocampo 233, Santiago 1ra Secc, Zumpango, Estado de México',
+  correoArco: '[CORREO-PARA-DATOS-PERSONALES]',
+  telefono: '[TELÉFONO DE CONTACTO]',
+  cofepris: content.avisos.permisoCofepris,
+};
+---
+<LandingLayout
+  seo={{
+    title: 'Aviso de privacidad',
+    description:
+      'Aviso de privacidad del Laboratorio Clínico de Hospital Cristal: qué datos recabamos, para qué los usamos y cómo ejercer tus derechos ARCO.',
+    keywords: [],
+  }}
+  avisos={content.avisos}
+  address={content.hero.address}
+  menu={menu}
+>
+  <section class="bg-bg">
+    <div class="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
+      <h1 class="text-3xl font-bold sm:text-4xl">Aviso de privacidad</h1>
+      <p class="mt-3 text-sm text-fg-muted">
+        Última actualización: {ultimaActualizacion}
+      </p>
+
+      <div class="mt-10 space-y-8 text-fg-muted">
+        <section aria-labelledby="responsable">
+          <h2 id="responsable" class="text-xl font-semibold text-fg">
+            1. Quién es responsable de tus datos
+          </h2>
+          <p class="mt-3">
+            <strong class="font-medium text-fg">{responsable.razonSocial}</strong>, que opera el{' '}
+            {responsable.nombreComercial}, con domicilio en {responsable.domicilio}, es
+            responsable del tratamiento de tus datos personales, conforme a la Ley Federal de
+            Protección de Datos Personales en Posesión de los Particulares (LFPDPPP) y su
+            reglamento.
+          </p>
+          <p class="mt-3">Permiso COFEPRIS: {responsable.cofepris}.</p>
+        </section>
+
+        <section aria-labelledby="datos">
+          <h2 id="datos" class="text-xl font-semibold text-fg">2. Qué datos recabamos</h2>
+          <p class="mt-3">Cuando usas el formulario de contacto de este sitio recabamos:</p>
+          <ul class="mt-3 list-disc space-y-1.5 pl-5">
+            <li>Nombre completo.</li>
+            <li>
+              Un dato de contacto: número de teléfono o WhatsApp, o dirección de correo
+              electrónico, según la vía que elijas.
+            </li>
+            <li>
+              El motivo de tu consulta, el tipo de estudio que te interesa y cuándo planeas
+              realizártelo.
+            </li>
+          </ul>
+
+          <div class="mt-4 rounded-xl border border-border bg-surface-muted p-4">
+            <p class="font-medium text-fg">Datos personales sensibles</p>
+            <p class="mt-2">
+              El motivo de tu consulta y el tipo de estudio que te interesa son
+              <strong class="font-medium text-fg"> datos personales sensibles</strong>, porque se
+              refieren a tu estado de salud. El artículo 9 de la LFPDPPP exige tu consentimiento
+              expreso para tratarlos, por lo que el formulario incluye una casilla que debes
+              marcar de forma voluntaria antes de enviarlo. Si no la marcas, no podemos procesar
+              tu solicitud por esta vía, pero puedes contactarnos por teléfono o acudir
+              directamente al laboratorio.
+            </p>
+          </div>
+
+          <p class="mt-4">
+            Si acudes a realizarte estudios, los resultados y tu expediente clínico se rigen por
+            la normativa sanitaria aplicable y no forman parte de los datos recabados por este
+            sitio web.
+          </p>
+        </section>
+
+        <section aria-labelledby="finalidades">
+          <h2 id="finalidades" class="text-xl font-semibold text-fg">3. Para qué los usamos</h2>
+          <p class="mt-3">
+            <strong class="font-medium text-fg">Finalidades necesarias</strong>, sin las cuales no
+            podemos atenderte:
+          </p>
+          <ul class="mt-3 list-disc space-y-1.5 pl-5">
+            <li>Contactarte por la vía que elegiste para agendar tus estudios.</li>
+            <li>Orientarte sobre qué estudio necesitas y cómo prepararte.</li>
+            <li>Darte información de precios y disponibilidad.</li>
+          </ul>
+          <p class="mt-4">
+            <strong class="font-medium text-fg">No</strong> usamos tus datos para publicidad,
+            mercadotecnia ni prospección comercial, ni los vendemos a terceros.
+          </p>
+        </section>
+
+        <section aria-labelledby="transferencias">
+          <h2 id="transferencias" class="text-xl font-semibold text-fg">
+            4. Con quién los compartimos
+          </h2>
+          <p class="mt-3">
+            No transferimos tus datos a terceros para que los usen por su cuenta. Sí utilizamos
+            proveedores de servicios tecnológicos que los procesan por encargo nuestro y bajo
+            nuestras instrucciones:
+          </p>
+          <ul class="mt-3 list-disc space-y-1.5 pl-5">
+            <li>
+              <strong class="font-medium text-fg">Google LLC</strong> (Google Sheets y Google Apps
+              Script), para registrar tu solicitud. Esto implica que tus datos, incluidos los
+              sensibles, se almacenan en servidores ubicados fuera de México.
+            </li>
+            <li>
+              <strong class="font-medium text-fg">MongoDB Atlas</strong>, para almacenar la
+              solicitud en nuestra base de datos.
+            </li>
+            <li>
+              <strong class="font-medium text-fg">Web3Forms</strong>, únicamente si eliges que te
+              contactemos por correo electrónico, para hacernos llegar tu mensaje.
+            </li>
+            <li>
+              <strong class="font-medium text-fg">Meta Platforms</strong> (WhatsApp), únicamente si
+              eliges esa vía, ya que el mensaje se envía a través de su plataforma.
+            </li>
+          </ul>
+          <p class="mt-4">
+            Al marcar la casilla de consentimiento aceptas también estas transferencias.
+          </p>
+        </section>
+
+        <section aria-labelledby="arco">
+          <h2 id="arco" class="text-xl font-semibold text-fg">5. Tus derechos ARCO</h2>
+          <p class="mt-3">
+            Puedes solicitar en cualquier momento el <strong class="font-medium text-fg">Acceso</strong>{' '}
+            a tus datos, su <strong class="font-medium text-fg">Rectificación</strong> si son
+            incorrectos, su <strong class="font-medium text-fg">Cancelación</strong> cuando
+            consideres que no son necesarios, u <strong class="font-medium text-fg">Oponerte</strong>{' '}
+            a su uso para fines específicos. También puedes revocar tu consentimiento.
+          </p>
+          <p class="mt-3">
+            Escríbenos a{' '}
+            <a
+              href={`mailto:${responsable.correoArco}`}
+              class="font-medium text-accent underline-offset-4 hover:underline"
+            >
+              {responsable.correoArco}
+            </a>{' '}
+            indicando tu nombre, un medio para responderte, qué derecho deseas ejercer y los
+            documentos que acrediten tu identidad. Responderemos en un plazo máximo de 20 días
+            hábiles.
+          </p>
+          <p class="mt-3">
+            Si consideras que tu derecho a la protección de datos ha sido vulnerado, puedes acudir
+            al <strong class="font-medium text-fg">INAI</strong> (
+            <a
+              href="https://home.inai.org.mx/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium text-accent underline-offset-4 hover:underline"
+            >
+              home.inai.org.mx
+              <span class="sr-only"> (se abre en una pestaña nueva)</span>
+            </a>
+            ).
+          </p>
+        </section>
+
+        <section aria-labelledby="conservacion">
+          <h2 id="conservacion" class="text-xl font-semibold text-fg">
+            6. Cuánto tiempo los conservamos
+          </h2>
+          <p class="mt-3">
+            Conservamos los datos del formulario durante{' '}
+            <strong class="font-medium text-fg">[PERIODO DE CONSERVACIÓN, p. ej. 24 meses]</strong>{' '}
+            contados desde tu solicitud, o hasta que nos pidas cancelarlos. Transcurrido ese plazo
+            se eliminan.
+          </p>
+        </section>
+
+        <section aria-labelledby="cookies">
+          <h2 id="cookies" class="text-xl font-semibold text-fg">7. Cookies</h2>
+          <p class="mt-3">
+            Este sitio no utiliza cookies de rastreo ni de publicidad. Solo guardamos en tu
+            navegador tu preferencia de tema claro u oscuro, que no permite identificarte.
+          </p>
+        </section>
+
+        <section aria-labelledby="cambios">
+          <h2 id="cambios" class="text-xl font-semibold text-fg">8. Cambios a este aviso</h2>
+          <p class="mt-3">
+            Cualquier modificación se publicará en esta misma página, y se actualizará la fecha de
+            «Última actualización» del encabezado. Te recomendamos revisarla periódicamente.
+          </p>
+          <p class="mt-3">
+            Para cualquier duda sobre este aviso, escríbenos a{' '}
+            <a
+              href={`mailto:${responsable.correoArco}`}
+              class="font-medium text-accent underline-offset-4 hover:underline"
+            >
+              {responsable.correoArco}
+            </a>{' '}
+            o llámanos al {responsable.telefono}.
+          </p>
+        </section>
+      </div>
+    </div>
+  </section>
+</LandingLayout>
