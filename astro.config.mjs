@@ -76,9 +76,12 @@ function normalizeSiteUrl(raw) {
  * Solo se manifiesta en local, porque el build de producción no usa el
  * optimizador.
  *
- * Dándole a cada comando su propio directorio, uno no puede envenenar al otro.
+ * La caché de desarrollo se reserva EXCLUSIVAMENTE para `astro dev`. No basta
+ * con apartar `astro build`: `astro check` también corre en modo producción y
+ * envenenaba la caché igual (verificado). Cualquier comando que no sea el
+ * servidor de desarrollo usa el directorio aparte.
  */
-const isBuild = process.argv.includes('build');
+const isDevServer = process.argv.includes('dev');
 
 const siteUrl = normalizeSiteUrl(process.env.PUBLIC_SITE_URL);
 
@@ -138,7 +141,7 @@ export default defineConfig({
   ],
 
   vite: {
-    cacheDir: isBuild ? 'node_modules/.vite-build' : 'node_modules/.vite',
+    cacheDir: isDevServer ? 'node_modules/.vite' : 'node_modules/.vite-build',
 
     plugins: [tailwindcss()],
 
