@@ -112,6 +112,25 @@ después esto en el navegador:
 - [ ] axe DevTools en `/` y en `/admin/contenido/hero`: 0 violaciones serias.
 - [ ] Navegar y editar una sección **usando solo el teclado**.
 
+## Si el panel falla con `dispatcher.getOwner is not a function`
+
+Solo ocurre en **desarrollo**; en producción no, porque el build no usa el
+optimizador de dependencias de Vite.
+
+`astro dev` y `astro build` compartían `node_modules/.vite`. El build corre en
+modo producción y resuelve `react` a `react.production.js`; el servidor de
+desarrollo reutilizaba esa caché y servía el runtime JSX de *desarrollo* contra
+unos internals de *producción*, que no exponen `getOwner`.
+
+Está resuelto dando a cada comando su propia caché (`vite.cacheDir` en
+`astro.config.mjs`). Si arrastras una caché envenenada de antes del arreglo:
+
+```bash
+npm run dev:reset
+```
+
+y recarga el navegador con caché forzada.
+
 ## Si el panel falla con `_jsxDEV is not a function`
 
 Es un desajuste del optimizador de dependencias de Vite en **desarrollo**

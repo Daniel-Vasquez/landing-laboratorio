@@ -60,6 +60,26 @@ function normalizeSiteUrl(raw) {
   return value;
 }
 
+/**
+ * Caché de dependencias SEPARADA para `build` y para `dev`.
+ *
+ * Vite pre-empaqueta las dependencias en `node_modules/.vite`, y `astro dev` y
+ * `astro build` comparten ese directorio. El build corre en modo producción, así
+ * que resuelve `react` a `react.production.js`; el servidor de desarrollo
+ * reutiliza después esa caché y sirve el runtime JSX de DESARROLLO contra unos
+ * internals de PRODUCCIÓN, que no exponen `getOwner`:
+ *
+ *   TypeError: dispatcher.getOwner is not a function
+ *
+ * Reproducido: `dev` en frío empaqueta `react.development.js` (40 KB) y, tras un
+ * `npm run build`, el mismo archivo pasa a ser `react.production.js` (20 KB).
+ * Solo se manifiesta en local, porque el build de producción no usa el
+ * optimizador.
+ *
+ * Dándole a cada comando su propio directorio, uno no puede envenenar al otro.
+ */
+const isBuild = process.argv.includes('build');
+
 const siteUrl = normalizeSiteUrl(process.env.PUBLIC_SITE_URL);
 
 // Fallar ruidosamente antes que emitir canonical/OG/sitemap apuntando a localhost.
@@ -118,6 +138,8 @@ export default defineConfig({
   ],
 
   vite: {
+    cacheDir: isBuild ? 'node_modules/.vite-build' : 'node_modules/.vite',
+
     plugins: [tailwindcss()],
 
     optimizeDeps: {

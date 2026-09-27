@@ -18,7 +18,8 @@
     "db:migrate-card-images": "node --env-file=.env scripts/migrate-card-images.ts",
     "check:icons": "node scripts/check-icon-catalog.ts",
     "budget": "node scripts/budget-check.mjs",
-    "db:migrate-icons": "node --env-file=.env scripts/migrate-icons.ts"
+    "db:migrate-icons": "node --env-file=.env scripts/migrate-icons.ts",
+    "dev:reset": "rm -rf node_modules/.vite node_modules/.vite-build .astro && astro dev"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",

@@ -5,6 +5,8 @@ dist/
 
 # deps
 node_modules/
+# caché del optimizador de Vite del build (separada de la de dev)
+node_modules/.vite-build/
 
 # entorno — NUNCA commitear
 .env
